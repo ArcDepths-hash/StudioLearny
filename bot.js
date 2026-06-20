@@ -32,8 +32,8 @@ client.on('messageCreate', (message) => {
     // Ignore messages from other bots, or messages that don't start with your prefix
     if (message.author.bot || !message.content.startsWith(PREFIX)) return;
 
-    // Split the message into the command name and arguments
-    const args = message.content.slice(PREFIX.length).trim().split(/+/);
+    // Split the message into the command name and arguments (Fixed Space Regex!)
+    const args = message.content.slice(PREFIX.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
     // Example Command: !ping
