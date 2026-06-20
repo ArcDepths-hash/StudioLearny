@@ -22,12 +22,12 @@ client.once('clientReady', (c) => {
     console.log(`Bot is online! Default prefix: ${DEFAULT_PREFIX}`);
     console.log(`Logged in as ${c.user.tag}`);
     
-    // Explicitly set the online status and activity
-    client.user.setPresence({
+    // Using 'online' with a standard Playing status forces the UI to refresh
+    c.user.setPresence({
         status: 'online',
         activities: [{
-            name: `for commands`, 
-            type: ActivityType.Listening
+            name: `with prefix ${DEFAULT_PREFIX}`, 
+            type: ActivityType.Playing
         }]
     });
 });
