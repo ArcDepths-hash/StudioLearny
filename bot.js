@@ -54,7 +54,7 @@ function saveAuthorizedUsers() {
 }
 
 // 2. The Setup Event
-client.once('clientReady', (c) => {
+client.once('ready', (c) => {
     console.log(`Bot is online! Default prefix: ${DEFAULT_PREFIX}`);
     console.log(`Logged in as ${c.user.tag}`);
     
@@ -93,7 +93,7 @@ client.on('messageCreate', (message) => {
         }
 
         authorizedUsers.push(targetUser.id);
-        saveAuthorizedUsers(); // Saves immediately to json file (creates it if missing)
+        saveAuthorizedUsers(); // Saves immediately to json file
 
         return message.reply(`✅ Success! ${targetUser.username} has been authorized and saved to permanent storage.`);
     }
@@ -117,6 +117,23 @@ client.on('messageCreate', (message) => {
         saveAuthorizedUsers(); // Removes immediately from json file
 
         return message.reply(`✅ Success! ${targetUser.username} has been removed from permanent storage.`);
+    }
+
+    if (command === 'authorized' || command === 'authorised') {
+        if (authorizedUsers.length === 0) {
+            return message.reply('ℹ️ There are currently no authorized teachers stored in the system.');
+        }
+
+        const userMentions = authorizedUsers.map(id => `<@${id}> (ID: ${id})`).join('\n');
+
+        const listEmbed = new EmbedBuilder()
+            .setColor('#1a1a1a')
+            .setTitle('👥 Authorized StudioLearny Teachers')
+            .setDescription(`The following users currently have access to the \`${currentPrefix}lesson\` command:\n\n${userMentions}`)
+            .setTimestamp()
+            .setFooter({ text: `Total Teachers: ${authorizedUsers.length}` });
+
+        return message.reply({ embeds: [listEmbed] });
     }
 
     // --- PREFIX CONFIGURATION COMMAND ---
