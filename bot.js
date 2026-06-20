@@ -31,21 +31,23 @@ const guildPrefixes = new Map();
 // File path for saving authorized users permanently
 const DATA_FILE = path.join(__dirname, 'authorized_users.json');
 
-// Load authorized users from file on startup
+// Load authorized users from file on startup so it survives crashes/restarts
 let authorizedUsers = [];
 if (fs.existsSync(DATA_FILE)) {
     try {
         authorizedUsers = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
-        console.log(`Loaded ${authorizedUsers.length} authorized users from file.`);
+        console.log(`Loaded ${authorizedUsers.length} authorized users from storage.`);
     } catch (err) {
         console.error('Error reading authorized users file, starting fresh:', err);
         authorizedUsers = [];
     }
 }
 
+// Helper function to write changes immediately to the disk (creates file automatically)
 function saveAuthorizedUsers() {
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(authorizedUsers, null, 4), 'utf8');
+        console.log('Authorized users list successfully saved to disk.');
     } catch (err) {
         console.error('Failed to save authorized users file:', err);
     }
@@ -91,9 +93,9 @@ client.on('messageCreate', (message) => {
         }
 
         authorizedUsers.push(targetUser.id);
-        saveAuthorizedUsers();
+        saveAuthorizedUsers(); // Saves immediately to json file (creates it if missing)
 
-        return message.reply(`✅ Success! ${targetUser.username} has been authorized to use lesson commands.`);
+        return message.reply(`✅ Success! ${targetUser.username} has been authorized and saved to permanent storage.`);
     }
 
     if (command === 'unauthorize') {
@@ -112,9 +114,9 @@ client.on('messageCreate', (message) => {
         }
 
         authorizedUsers.splice(index, 1);
-        saveAuthorizedUsers();
+        saveAuthorizedUsers(); // Removes immediately from json file
 
-        return message.reply(`✅ Success! ${targetUser.username} has been stripped of their teacher permissions.`);
+        return message.reply(`✅ Success! ${targetUser.username} has been removed from permanent storage.`);
     }
 
     // --- PREFIX CONFIGURATION COMMAND ---
@@ -146,7 +148,6 @@ client.on('messageCreate', (message) => {
             return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
         }
 
-        // Build the interactive buttons
         const row = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId('lesson_mistake')
@@ -167,9 +168,7 @@ client.on('messageCreate', (message) => {
 
 // Handling Button clicks and Form submissions
 client.on('interactionCreate', async (interaction) => {
-    // 1. Handle Button Interactions
     if (interaction.isButton()) {
-        // Only allow the original teacher who triggered the prompt to click these buttons
         if (interaction.message.reference) {
             const originalMsg = await interaction.channel.messages.fetch(interaction.message.reference.messageId).catch(() => null);
             if (originalMsg && interaction.user.id !== originalMsg.author.id) {
@@ -177,12 +176,10 @@ client.on('interactionCreate', async (interaction) => {
             }
         }
 
-        // Cancel button action
         if (interaction.customId === 'lesson_mistake') {
             return interaction.update({ content: '❌ Action cancelled.', components: [] });
         }
 
-        // Write Lesson button action (Triggers the Form/Modal)
         if (interaction.customId === 'lesson_write') {
             const modal = new ModalBuilder()
                 .setCustomId('lesson_modal')
@@ -191,36 +188,29 @@ client.on('interactionCreate', async (interaction) => {
             const lessonInput = new TextInputBuilder()
                 .setCustomId('lesson_content_input')
                 .setLabel('Enter your lesson text below:')
-                .setStyle(TextInputStyle.Paragraph) // Large multi-line box
+                .setStyle(TextInputStyle.Paragraph)
                 .setPlaceholder('Type your code block, instructions, or challenges here...')
                 .setRequired(true);
 
-            // Modals require each text component to be in its own ActionRow
             const firstActionRow = new ActionRowBuilder().addComponents(lessonInput);
             modal.addComponents(firstActionRow);
 
-            // Present the modal to the teacher
             await interaction.showModal(modal);
-            
-            // Clean up the initial button prompt message
             return interaction.message.delete().catch(() => null);
         }
     }
 
-    // 2. Handle Form/Modal Submissions
     if (interaction.isModalSubmit()) {
         if (interaction.customId === 'lesson_modal') {
             const lessonText = interaction.fields.getTextInputValue('lesson_content_input');
 
-            // Construct a dark/black themed embed holding the submitted content
             const lessonEmbed = new EmbedBuilder()
-                .setColor('#1a1a1a') // Dark charcoal finish
+                .setColor('#1a1a1a')
                 .setTitle('📚 StudioLearny Live Lesson')
                 .setDescription(lessonText)
                 .setTimestamp()
                 .setFooter({ text: `Instructor: ${interaction.user.username}` });
 
-            // Send embed directly to the ticket channel
             await interaction.reply({ embeds: [lessonEmbed] });
         }
     }
@@ -229,7 +219,7 @@ client.on('interactionCreate', async (interaction) => {
 // 4. Web Server for Railway
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Interactive Tutor Bot is running!\n');
+    res.end('Persistent Tutor Bot is running!\n');
 });
 
 const PORT = process.env.PORT || 8080;
