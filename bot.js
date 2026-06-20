@@ -1,4 +1,16 @@
-const { Client, GatewayIntentBits, ActivityType, PermissionFlagsBits } = require('discord.js');
+const { 
+    Client, 
+    GatewayIntentBits, 
+    ActivityType, 
+    PermissionFlagsBits,
+    ActionRowBuilder,
+    ButtonBuilder,
+    ButtonStyle,
+    ModalBuilder,
+    TextInputBuilder,
+    TextInputStyle,
+    EmbedBuilder
+} = require('discord.js');
 const http = require('http');
 const fs = require('fs');
 const path = require('path');
@@ -31,7 +43,6 @@ if (fs.existsSync(DATA_FILE)) {
     }
 }
 
-// Helper function to save authorized users to the file
 function saveAuthorizedUsers() {
     try {
         fs.writeFileSync(DATA_FILE, JSON.stringify(authorizedUsers, null, 4), 'utf8');
@@ -54,7 +65,7 @@ client.once('clientReady', (c) => {
     });
 });
 
-// 3. The Message / Command Handler
+// 3. Command and Interaction Handler
 client.on('messageCreate', (message) => {
     if (!message.guild || message.author.bot) return;
 
@@ -65,8 +76,6 @@ client.on('messageCreate', (message) => {
     const command = args.shift().toLowerCase();
 
     // --- ADMINISTRATIVE COMMANDS ---
-
-    // Command: !authorize @user
     if (command === 'authorize') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ You do not have the required Administrator permission to use this command.');
@@ -87,7 +96,6 @@ client.on('messageCreate', (message) => {
         return message.reply(`✅ Success! ${targetUser.username} has been authorized to use lesson commands.`);
     }
 
-    // Command: !unauthorize @user
     if (command === 'unauthorize') {
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ You do not have the required Administrator permission to use this command.');
@@ -131,22 +139,97 @@ client.on('messageCreate', (message) => {
         return message.reply(`The current prefix is \`${currentPrefix}\`. Change it using \`${currentPrefix}prefix set [new-prefix]\`.`);
     }
 
-    // --- LESSON COMMANDS BLOCK (Protected by Authorization) ---
-    const isAuthorized = authorizedUsers.includes(message.author.id);
-
+    // --- LESSON COMMAND WITH BUTTONS ---
     if (command === 'lesson') {
+        const isAuthorized = authorizedUsers.includes(message.author.id);
         if (!isAuthorized) {
             return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
         }
 
-        return message.reply('📚 Teacher verified! What topic are we teaching today?');
+        // Build the interactive buttons
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder()
+                .setCustomId('lesson_mistake')
+                .setLabel('I made a mistake')
+                .setStyle(ButtonStyle.Danger),
+            new ButtonBuilder()
+                .setCustomId('lesson_write')
+                .setLabel('Write lesson')
+                .setStyle(ButtonStyle.Success)
+        );
+
+        return message.reply({
+            content: '👋 Welcome teacher, what are we doing today?',
+            components: [row]
+        });
+    }
+});
+
+// Handling Button clicks and Form submissions
+client.on('interactionCreate', async (interaction) => {
+    // 1. Handle Button Interactions
+    if (interaction.isButton()) {
+        // Only allow the original teacher who triggered the prompt to click these buttons
+        if (interaction.message.reference) {
+            const originalMsg = await interaction.channel.messages.fetch(interaction.message.reference.messageId).catch(() => null);
+            if (originalMsg && interaction.user.id !== originalMsg.author.id) {
+                return interaction.reply({ content: '❌ Only the teacher who initiated this command can use these buttons.', ephemeral: true });
+            }
+        }
+
+        // Cancel button action
+        if (interaction.customId === 'lesson_mistake') {
+            return interaction.update({ content: '❌ Action cancelled.', components: [] });
+        }
+
+        // Write Lesson button action (Triggers the Form/Modal)
+        if (interaction.customId === 'lesson_write') {
+            const modal = new ModalBuilder()
+                .setCustomId('lesson_modal')
+                .setTitle('Create Coding Lesson');
+
+            const lessonInput = new TextInputBuilder()
+                .setCustomId('lesson_content_input')
+                .setLabel('Enter your lesson text below:')
+                .setStyle(TextInputStyle.Paragraph) // Large multi-line box
+                .setPlaceholder('Type your code block, instructions, or challenges here...')
+                .setRequired(true);
+
+            // Modals require each text component to be in its own ActionRow
+            const firstActionRow = new ActionRowBuilder().addComponents(lessonInput);
+            modal.addComponents(firstActionRow);
+
+            // Present the modal to the teacher
+            await interaction.showModal(modal);
+            
+            // Clean up the initial button prompt message
+            return interaction.message.delete().catch(() => null);
+        }
+    }
+
+    // 2. Handle Form/Modal Submissions
+    if (interaction.isModalSubmit()) {
+        if (interaction.customId === 'lesson_modal') {
+            const lessonText = interaction.fields.getTextInputValue('lesson_content_input');
+
+            // Construct a dark/black themed embed holding the submitted content
+            const lessonEmbed = new EmbedBuilder()
+                .setColor('#1a1a1a') // Dark charcoal finish
+                .setTitle('📚 StudioLearny Live Lesson')
+                .setDescription(lessonText)
+                .setTimestamp()
+                .setFooter({ text: `Instructor: ${interaction.user.username}` });
+
+            // Send embed directly to the ticket channel
+            await interaction.reply({ embeds: [lessonEmbed] });
+        }
     }
 });
 
 // 4. Web Server for Railway
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Authorized Tutor Bot is running!\n');
+    res.end('Interactive Tutor Bot is running!\n');
 });
 
 const PORT = process.env.PORT || 8080;
