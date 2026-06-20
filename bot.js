@@ -1,5 +1,16 @@
 const { Client, GatewayIntentBits } = require('discord.js');
+const http = require('http'); // Built-in Node.js package
 
+// 1. CREATE A TINY WEB SERVER FOR RENDER (KEEPS IT ALIVE FOR FREE)
+const port = process.env.PORT || 3000;
+http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('StudioLearny is alive!');
+}).listen(port, () => {
+    console.log(`Web server listening on port ${port}`);
+});
+
+// 2. YOUR DISCORD BOT CODE
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -9,11 +20,7 @@ const client = new Client({
 });
 
 const token = process.env.DISCORD_TOKEN;
-
-// Default prefix
 let currentPrefix = '!'; 
-
-// Allowed special characters for the prefix
 const allowedPrefixes = ['!', '@', '#', '$', '%', '^', '&', '<', '>', '?', '/', '\\'];
 
 client.once('ready', () => {
@@ -22,15 +29,11 @@ client.once('ready', () => {
 
 client.on('messageCreate', async (message) => {
     if (message.author.bot) return;
-
-    // Check if the message starts with the current prefix
     if (!message.content.startsWith(currentPrefix)) return;
 
-    // Split the message into the command and arguments
     const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // Prefix change command
     if (command === 'prefix' && args[0] === 'change') {
         await message.channel.send(
             `To change the prefix, please type your new prefix. It must be one of these characters:\n\`${allowedPrefixes.join(' ')}\``
