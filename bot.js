@@ -1,51 +1,95 @@
-const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, PermissionFlagsBits } = require('discord.js');
 const http = require('http');
+const fs = require('fs');
+const path = require('path');
 
-// 1. Initialize Client with required Intents (Including GuildPresences)
+// 1. Initialize Client with required Intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildPresences // Allows the bot to update its online status ring
+        GatewayIntentBits.GuildPresences
     ]
 });
 
-// Default fallback prefix if a server hasn't set a custom one yet
 const DEFAULT_PREFIX = '!';
-
-// An in-memory collection to hold custom prefixes per server (guild)
 const guildPrefixes = new Map();
+
+// File path for saving authorized users permanently
+const DATA_FILE = path.join(__dirname, 'authorized_users.json');
+
+// Load authorized users from file on startup, or start fresh if it doesn't exist
+let authorizedUsers = [];
+if (fs.existsSync(DATA_FILE)) {
+    try {
+        authorizedUsers = JSON.parse(fs.readFileSync(DATA_FILE, 'utf8'));
+        console.log(`Loaded ${authorizedUsers.length} authorized users from file.`);
+    } catch (err) {
+        console.error('Error reading authorized users file, starting fresh:', err);
+        authorizedUsers = [];
+    }
+}
+
+// Helper function to save authorized users to the file
+function saveAuthorizedUsers() {
+    try {
+        fs.writeFileSync(DATA_FILE, JSON.stringify(authorizedUsers, null, 4), 'utf8');
+    } catch (err) {
+        console.error('Failed to save authorized users file:', err);
+    }
+}
 
 // 2. The Setup Event
 client.once('clientReady', (c) => {
     console.log(`Bot is online! Default prefix: ${DEFAULT_PREFIX}`);
     console.log(`Logged in as ${c.user.tag}`);
     
-    // Using 'online' with a standard Playing status forces the UI to refresh
-    c.user.setPresence({
+    client.user.setPresence({
         status: 'online',
         activities: [{
-            name: `with prefix ${DEFAULT_PREFIX}`, 
-            type: ActivityType.Playing
+            name: `for lessons`, 
+            type: ActivityType.Listening
         }]
     });
 });
 
-// 3. The Message / Dynamic Prefix Handler
+// 3. The Message / Command Handler
 client.on('messageCreate', (message) => {
-    // Ignore direct messages (DMs) and other bots
     if (!message.guild || message.author.bot) return;
 
-    // Get the custom prefix for this specific server, or fall back to default
     const currentPrefix = guildPrefixes.get(message.guild.id) || DEFAULT_PREFIX;
-
-    // Check if the message starts with the active prefix
     if (!message.content.startsWith(currentPrefix)) return;
 
-    // Parse commands and arguments
     const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
+
+    // --- ADMINISTRATIVE COMMANDS ---
+
+    // Command: !authorize @user
+    if (command === 'authorize') {
+        // Check if the person running the command has the Administrator permission
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ You do not have the required Administrator permission to use this command.');
+        }
+
+        // Get the mentioned user
+        const targetUser = message.mentions.users.first();
+        if (!targetUser) {
+            return message.reply(`❌ Please mention a user to authorize. Example: \`${currentPrefix}authorize @user\``);
+        }
+
+        // Check if they are already authorized
+        if (authorizedUsers.includes(targetUser.id)) {
+            return message.reply(`⚠️ ${targetUser.username} is already authorized.`);
+        }
+
+        // Add to array and save permanently to file
+        authorizedUsers.push(targetUser.id);
+        saveAuthorizedUsers();
+
+        return message.reply(`✅ Success! ${targetUser.username} has been authorized to use lesson commands.`);
+    }
 
     // --- PREFIX CONFIGURATION COMMAND ---
     if (command === 'prefix') {
@@ -62,7 +106,6 @@ client.on('messageCreate', (message) => {
                 return message.reply('❌ The prefix must be 3 characters or less.');
             }
 
-            // Save the new prefix for this server's ID
             guildPrefixes.set(message.guild.id, newPrefix);
             return message.reply(`✅ Success! The prefix for this server has been changed to \`${newPrefix}\`.`);
         }
@@ -70,15 +113,25 @@ client.on('messageCreate', (message) => {
         return message.reply(`The current prefix is \`${currentPrefix}\`. Change it using \`${currentPrefix}prefix set [new-prefix]\`.`);
     }
 
-    // --- STANDARD BOT COMMANDS ---
-    // Your new custom commands go right under here!
+    // --- LESSON COMMANDS BLOCK (Protected by Authorization) ---
     
+    // Check if the user trying to run lesson commands is authorized
+    const isAuthorized = authorizedUsers.includes(message.author.id);
+
+    // Dynamic lesson commands can be built right here!
+    if (command === 'lesson') {
+        if (!isAuthorized) {
+            return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
+        }
+
+        return message.reply('📚 Teacher verified! What topic are we teaching today?');
+    }
 });
 
 // 4. Web Server for Railway
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Bot is running!\n');
+    res.end('Authorized Tutor Bot is running!\n');
 });
 
 const PORT = process.env.PORT || 8080;
