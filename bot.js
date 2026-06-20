@@ -19,7 +19,7 @@ const guildPrefixes = new Map();
 // File path for saving authorized users permanently
 const DATA_FILE = path.join(__dirname, 'authorized_users.json');
 
-// Load authorized users from file on startup, or start fresh if it doesn't exist
+// Load authorized users from file on startup
 let authorizedUsers = [];
 if (fs.existsSync(DATA_FILE)) {
     try {
@@ -68,27 +68,45 @@ client.on('messageCreate', (message) => {
 
     // Command: !authorize @user
     if (command === 'authorize') {
-        // Check if the person running the command has the Administrator permission
         if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
             return message.reply('❌ You do not have the required Administrator permission to use this command.');
         }
 
-        // Get the mentioned user
         const targetUser = message.mentions.users.first();
         if (!targetUser) {
             return message.reply(`❌ Please mention a user to authorize. Example: \`${currentPrefix}authorize @user\``);
         }
 
-        // Check if they are already authorized
         if (authorizedUsers.includes(targetUser.id)) {
             return message.reply(`⚠️ ${targetUser.username} is already authorized.`);
         }
 
-        // Add to array and save permanently to file
         authorizedUsers.push(targetUser.id);
         saveAuthorizedUsers();
 
         return message.reply(`✅ Success! ${targetUser.username} has been authorized to use lesson commands.`);
+    }
+
+    // Command: !unauthorize @user
+    if (command === 'unauthorize') {
+        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
+            return message.reply('❌ You do not have the required Administrator permission to use this command.');
+        }
+
+        const targetUser = message.mentions.users.first();
+        if (!targetUser) {
+            return message.reply(`❌ Please mention a user to unauthorize. Example: \`${currentPrefix}unauthorize @user\``);
+        }
+
+        const index = authorizedUsers.indexOf(targetUser.id);
+        if (index === -1) {
+            return message.reply(`⚠️ ${targetUser.username} is not currently authorized.`);
+        }
+
+        authorizedUsers.splice(index, 1);
+        saveAuthorizedUsers();
+
+        return message.reply(`✅ Success! ${targetUser.username} has been stripped of their teacher permissions.`);
     }
 
     // --- PREFIX CONFIGURATION COMMAND ---
@@ -114,11 +132,8 @@ client.on('messageCreate', (message) => {
     }
 
     // --- LESSON COMMANDS BLOCK (Protected by Authorization) ---
-    
-    // Check if the user trying to run lesson commands is authorized
     const isAuthorized = authorizedUsers.includes(message.author.id);
 
-    // Dynamic lesson commands can be built right here!
     if (command === 'lesson') {
         if (!isAuthorized) {
             return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
