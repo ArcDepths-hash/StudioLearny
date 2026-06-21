@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
 const http = require('http');
 
 const client = new Client({
@@ -28,7 +28,44 @@ client.on('messageCreate', (message) => {
     const msgLower = message.content.toLowerCase().trim();
 
     // =======================================================
-    // MAXIMUM CAPACITY USER PHRASES LISTS
+    // 1. SMART TYPO-PROOF RULES & FEATURE GUIDE COMMAND
+    // =======================================================
+    
+    // Check for hardcoded shortcuts first
+    const ruleShortcuts = ['!rules', '!rulas', '!rulos', '!rul', '!rule', '!rls'];
+    
+    // Checks if the message matches a shortcut OR starts with an FAQ prefix and contains a rule keyword anywhere in it
+    const isRuleCommand = ruleShortcuts.some(shortcut => msgLower.startsWith(shortcut)) || 
+        ((msgLower.startsWith('!faq') || msgLower.startsWith('faq!') || msgLower.startsWith('faq/')) && 
+         (msgLower.includes('rls') || msgLower.includes('rul') || msgLower.includes('rule') || msgLower.includes('rulas') || msgLower.includes('rulos')));
+
+    if (isRuleCommand) {
+        const rulesEmbed = new EmbedBuilder()
+            .setColor('#00bfff')
+            .setTitle('📚 StudioLearny Bot Guide & System Rules')
+            .setDescription('Welcome to the official StudioLearny system manual! Below is the breakdown of how our custom automated features work for both students and staff.')
+            .addFields(
+                { 
+                    name: '🎓 FOR STUDENTS', 
+                    value: '• **Automated Lessons:** When an instructor publishes a lesson, you will receive a clean embedded summary containing the lesson link and resources.\n• **Smart Support:** If you ask vague questions or run into broken code, our assistance trackers will automatically guide you or point you to staff.' 
+                },
+                { 
+                    name: '💼 FOR TEACHERS (Staff Tiers)', 
+                    value: '• **Basic Teacher:** Access to publish standard template lessons using core bot triggers.\n• **Golden Teacher:** Enhanced perks including custom lesson titles and specialized curriculum content distribution.\n• **Diamond Teacher:** Premium tier with full access to custom formatting, advanced titles, and direct developer tools.'
+                },
+                {
+                    name: '📝 SERVER CONDUCT',
+                    value: '1. Please use the appropriate channels when requesting code assistance.\n2. Do not spam or misuse bot triggers.\n3. Respect the instructor hierarchy and moderation staff at all times.'
+                }
+            )
+            .setFooter({ text: 'StudioLearny Management System • Continuous Learning' })
+            .setTimestamp();
+
+        return message.reply({ embeds: [rulesEmbed] });
+    }
+
+    // =======================================================
+    // 2. MAXIMUM CAPACITY USER PHRASES LISTS (Conversational)
     // =======================================================
     
     // Massive list of ways users tell a bot it wasn't summoned for them
@@ -70,10 +107,10 @@ client.on('messageCreate', (message) => {
     ];
 
     // =======================================================
-    // LOGIC & TRIGGER CHECKS
+    // 3. LOGIC & TRIGGER CHECKS (Conversational)
     // =======================================================
 
-    // --- 1. CONTEXT CHECK: User dismissing the bot ---
+    // --- CONTEXT CHECK: User dismissing the bot ---
     if (recentClarifications.has(userId)) {
         const userIsDismissing = botDismissals.some(phrase => msgLower.includes(phrase));
         
@@ -83,7 +120,7 @@ client.on('messageCreate', (message) => {
         }
     }
 
-    // --- 2. TRIGGER: Vague Help Question ---
+    // --- TRIGGER: Vague Help Question ---
     const isVagueQuestion = vagueQuestions.some(phrase => msgLower.includes(phrase)) || 
                             (msgLower.includes('know') && msgLower.includes('how'));
 
@@ -95,7 +132,7 @@ client.on('messageCreate', (message) => {
         return message.reply('could u clarify what u mean whit this');
     }
 
-    // --- 3. TRIGGER: Broken Code Help ---
+    // --- TRIGGER: Broken Code Help ---
     const isBrokenCode = brokenCodePhrases.some(phrase => msgLower.includes(phrase));
 
     if (isBrokenCode) {
@@ -113,4 +150,4 @@ server.listen(8081, () => {
     console.log('FAQ Web Server listening on port 8081');
 });
 
-client.login(process.env.DISCORD_TOKEN);
+client.login(process.env.DISCORD_TOKEN);SS
