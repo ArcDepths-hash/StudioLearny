@@ -28,27 +28,45 @@ client.on('messageCreate', (message) => {
     const msgLower = message.content.toLowerCase().trim();
 
     // =======================================================
-    // LISTS OF POTENTIAL USER PHRASES (VARIATIONS)
+    // MAXIMUM CAPACITY USER PHRASES LISTS
     // =======================================================
     
-    // Ways people tell a bot it wasn't talking to them
+    // Massive list of ways users tell a bot it wasn't summoned for them
     const botDismissals = [
         'no not you', 'not you', 'wrong bot', 'shutup bot', 'shut up bot', 
         'go away', 'stop', 'quiet', 'wasnt talking to you', 'wasn\'t talking to you',
-        'lol no', 'bruh no', 'not talking to you', 'stfu'
+        'lol no', 'bruh no', 'not talking to you', 'stfu', 'shh', 'hush', 
+        'leave', 'chill bot', 'stop bot', 'no u', 'no client', 'nvm', 'nevermind',
+        'not u', 'unask', 'missclick', 'misclick', 'who asked', 'who asked u',
+        'skip', 'cancel', 'ignore', 'nvmd', 'no thx', 'no thanks', 'im good', 
+        'i\'m good', 'go away bot', 'hush bot', 'stop replying', 'wrong person', 
+        'not asking you', 'didnt ask you', 'didn\'t ask you', 'chill out bot', 
+        'dw', 'dont worry', 'don\'t worry', 'false alarm', 'nvm bot', 'shush'
     ];
 
-    // Ways people ask vague help questions
+    // Every casual, quick, or vague way people ask "how do I do this"
     const vagueQuestions = [
         'how to do this', 'how do i do this', 'anyone know how', 'anybody know how',
-        'how to do this thing', 'how to make this work', 'need help with this'
+        'how to do this thing', 'how to make this work', 'need help with this',
+        'how do this', 'how does this work', 'someone help with this', 'help with this',
+        'how to fix this', 'stuck on this', 'how do i fix this', 'how to do it', 
+        'how do it', 'anyone know this', 'know how to do', 'stuck on a thing',
+        'how to code this', 'how to script this', 'how do i start this', 'need help doing',
+        'how do i setup', 'how to setup', 'how does one do', 'how do you do', 
+        'clue how to', 'idea how to', 'know how to'
     ];
 
-    // Ways people complain about broken code
+    // Total coverage for phrases when a user's code/script is throwing errors
     const brokenCodePhrases = [
         'code working', 'code is not working', 'code isnt working', 'code working',
         'error in my code', 'code keeps crashing', 'code error', 'fix my code',
-        'cant get this code'
+        'cant get this code', 'my code broke', 'code broken', 'script broke', 
+        'script error', 'script isnt working', 'script not working', 'bug in code',
+        'code broken', 'error log', 'syntax error', 'crash log', 'code fails',
+        'code exploded', 'script exploded', 'my code is broken', 'my script is broken',
+        'getting an error', 'throwing an error', 'code doesn\'t work', 'code doesnt work',
+        'script doesn\'t work', 'script doesnt work', 'error message', 'line error',
+        'code is failing', 'script is failing', 'buggy code', 'broken script'
     ];
 
     // =======================================================
