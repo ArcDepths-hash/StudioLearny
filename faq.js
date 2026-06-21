@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = require('discord.js');
 const http = require('http');
 
 const client = new Client({
@@ -20,7 +20,7 @@ client.once('ready', (c) => {
     });
 });
 
-client.on('messageCreate', (message) => {
+client.on('messageCreate', async (message) => {
     // Ignore all bots
     if (message.author.bot) return;
 
@@ -30,11 +30,8 @@ client.on('messageCreate', (message) => {
     // =======================================================
     // 1. SMART TYPO-PROOF RULES & FEATURE GUIDE COMMAND
     // =======================================================
-    
-    // Check for hardcoded shortcuts first
     const ruleShortcuts = ['!rules', '!rulas', '!rulos', '!rul', '!rule', '!rls'];
     
-    // Checks if the message matches a shortcut OR starts with an FAQ prefix and contains a rule keyword anywhere in it
     const isRuleCommand = ruleShortcuts.some(shortcut => msgLower.startsWith(shortcut)) || 
         ((msgLower.startsWith('!faq') || msgLower.startsWith('faq!') || msgLower.startsWith('faq/')) && 
          (msgLower.includes('rls') || msgLower.includes('rul') || msgLower.includes('rule') || msgLower.includes('rulas') || msgLower.includes('rulos')));
@@ -65,10 +62,58 @@ client.on('messageCreate', (message) => {
     }
 
     // =======================================================
-    // 2. MAXIMUM CAPACITY USER PHRASES LISTS (Conversational)
+    // 2. ADMINISTRATIVE COMMANDS (!clean dm)
     // =======================================================
-    
-    // Massive list of ways users tell a bot it wasn't summoned for them
+    if (msgLower === '!clean dm') {
+        try {
+            // Open/fetch the target user's Direct Message channel object
+            const dmChannel = await message.author.createDM();
+            
+            // Send initial processing status message in public channel
+            const processingNotice = await message.reply('🧹 *Attempting to scrub historical bot footprints from your direct messages...*');
+
+            // Fetch the last 50 messages from the DM channel pipeline
+            const dmHistory = await dmChannel.messages.fetch({ limit: 50 });
+            
+            // Isolate only messages that were sent by this bot client instance
+            const botMessages = dmHistory.filter(msg => msg.author.id === client.user.id);
+
+            if (botMessages.size === 0) {
+                await processingNotice.edit('✨ Your DM history with this node is already empty or clear of active bot frames.');
+                setTimeout(() => processingNotice.delete().catch(() => null), 7000);
+                return;
+            }
+
+            let scrubbedCount = 0;
+            
+            // Sequentially edit the bot's messages down to empty markers or attempt direct deletion loops
+            for (const [id, botMsg] of botMessages) {
+                // Bots can delete their own text strings inside private DM contexts
+                await botMsg.delete().catch(async () => {
+                    // Fallback: If message age or state flags block absolute deletion, scrub content using systemic voids
+                    await botMsg.edit({ content: '▫️ *Session history cleared by user choice.*', embeds: [], components: [] }).catch(() => null);
+                });
+                scrubbedCount++;
+            }
+
+            // Update public processing notification to display success metrics
+            await processingNotice.edit(`✅ **Cleanup Sequence Complete.** Successfully cleared or voided \`${scrubbedCount}\` bot frames inside your private DM feed.`);
+            
+            // Clean up the public tracking notification after 7 seconds
+            setTimeout(() => processingNotice.delete().catch(() => null), 7000);
+            return;
+
+        } catch (error) {
+            console.error('[FAQ Engine Exception] Direct Message clean routine blocked:', error);
+            const failureNotice = await message.reply('❌ **Matrix Transmission Blundered:** Failed to execute full DM scrub. Ensure your account privacy permissions permit server-member communication updates.');
+            setTimeout(() => failureNotice.delete().catch(() => null), 7000);
+            return;
+        }
+    }
+
+    // =======================================================
+    // 3. MAXIMUM CAPACITY USER PHRASES LISTS (Conversational)
+    // =======================================================
     const botDismissals = [
         'no not you', 'not you', 'wrong bot', 'shutup bot', 'shut up bot', 
         'go away', 'stop', 'quiet', 'wasnt talking to you', 'wasn\'t talking to you',
@@ -81,7 +126,6 @@ client.on('messageCreate', (message) => {
         'dw', 'dont worry', 'don\'t worry', 'false alarm', 'nvm bot', 'shush'
     ];
 
-    // Every casual, quick, or vague way people ask "how do I do this"
     const vagueQuestions = [
         'how to do this', 'how do i do this', 'anyone know how', 'anybody know how',
         'how to do this thing', 'how to make this work', 'need help with this',
@@ -89,11 +133,10 @@ client.on('messageCreate', (message) => {
         'how to fix this', 'stuck on this', 'how do i fix this', 'how to do it', 
         'how do it', 'anyone know this', 'know how to do', 'stuck on a thing',
         'how to code this', 'how to script this', 'how do i start this', 'need help doing',
-        'how do i setup', 'how to setup', 'how does one do', 'how do you do', 
+        'how do i setup', 'how to setup', 'how does one do', 'how you do', 
         'clue how to', 'idea how to', 'know how to'
     ];
 
-    // Total coverage for phrases when a user's code/script is throwing errors
     const brokenCodePhrases = [
         'code working', 'code is not working', 'code isnt working', 'code working',
         'error in my code', 'code keeps crashing', 'code error', 'fix my code',
@@ -107,7 +150,7 @@ client.on('messageCreate', (message) => {
     ];
 
     // =======================================================
-    // 3. LOGIC & TRIGGER CHECKS (Conversational)
+    // 4. LOGIC & TRIGGER CHECKS WITH SELF-CLEANUP
     // =======================================================
 
     // --- CONTEXT CHECK: User dismissing the bot ---
@@ -116,27 +159,37 @@ client.on('messageCreate', (message) => {
         
         if (userIsDismissing) {
             recentClarifications.delete(userId);
-            return message.reply('Understood. Apologies for the interruption.');
+            const dismissalReply = await message.reply('Understood. Apologies for the interruption.');
+            
+            // Decays the apology message after 5 seconds to minimize channel pollution
+            setTimeout(() => dismissalReply.delete().catch(() => null), 5000);
+            return;
         }
     }
 
     // --- TRIGGER: Vague Help Question ---
-    // FIXED: Now triggers if it matches the checklist OR simply contains the single word "how"
     const isVagueQuestion = vagueQuestions.some(phrase => msgLower.includes(phrase)) || msgLower.includes('how');
 
     if (isVagueQuestion) {
-        // Track this user for 45 seconds to see if they dismiss the bot next
         recentClarifications.set(userId, true);
         setTimeout(() => recentClarifications.delete(userId), 45000); 
 
-        return message.reply('could u clarify what u mean whit this');
+        const clarificationReply = await message.reply('could u clarify what u mean whit this');
+
+        // Decays the clarification prompt after 30 seconds
+        setTimeout(() => clarificationReply.delete().catch(() => null), 30000);
+        return;
     }
 
     // --- TRIGGER: Broken Code Help ---
     const isBrokenCode = brokenCodePhrases.some(phrase => msgLower.includes(phrase));
 
     if (isBrokenCode) {
-        return message.reply('Please ask our moderation team or instructors for assistance.');
+        const staffRedirectReply = await message.reply('Please ask our moderation team or instructors for assistance.');
+        
+        // Decays the assistance redirect block after 20 seconds
+        setTimeout(() => staffRedirectReply.delete().catch(() => null), 20000);
+        return;
     }
 });
 
