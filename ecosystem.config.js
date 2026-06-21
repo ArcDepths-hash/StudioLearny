@@ -13,6 +13,13 @@ module.exports = {
       env: {
         NODE_ENV: 'production'
       }
+    },
+    {
+      name: 'subscription-bot',
+      script: 'subscription.js',
+      env: {
+        NODE_ENV: 'production'
+      }
     }
   ]
 };
