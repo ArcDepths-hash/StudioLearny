@@ -2,9 +2,9 @@
 const OWNER_ID = '151137753907966353'; 
 
 // Separate your teacher roles by tier
-const BASIC_TEACHER_ROLE_ID   = '151817950105645872';
-const GOLDEN_TEACHER_ROLE_ID  = '151817952854593146';
-const DIAMOND_TEACHER_ROLE_ID = '151817955456319491';
+const BASIC_TEACHER_ROLE_ID   = '1518179501056458792';
+const GOLDEN_TEACHER_ROLE_ID  = '1518179528545931463';
+const DIAMOND_TEACHER_ROLE_ID = '1518179554563194910';
 // =======================================================
 
 const { 
@@ -58,9 +58,9 @@ client.on('messageCreate', (message) => {
             .setDescription('Here is the official staff lineup and the specific rank permissions assigned to each role:')
             .addFields(
                 { name: '👑 Bot Owner', value: `<@${OWNER_ID}> (Full Developer Access)`, inline: false },
-                { name: '🥇 Diamond Tier', value: `<@&${DIAMOND_TEACHER_ROLE_ID}>\n*Perks: Custom Titles, Content, and Hex Colors*`, inline: false },
-                { name: '🥈 Golden Tier', value: `<@&${GOLDEN_TEACHER_ROLE_ID}>\n*Perks: Custom Titles and Content*`, inline: false },
-                { name: '🥉 Basic Tier', value: `<@&${BASIC_TEACHER_ROLE_ID}>\n*Perks: Standard Template Lessons*`, inline: false }
+                { name: '🥇 Diamond Tier', value: `<@&${1518179554563194910}>\n*Perks: Custom Titles, Content, and Hex Colors*`, inline: false },
+                { name: '🥈 Golden Tier', value: `<@&${1518179528545931463}>\n*Perks: Custom Titles and Content*`, inline: false },
+                { name: '🥉 Basic Tier', value: `<@&${1518179501056458792}>\n*Perks: Standard Template Lessons*`, inline: false }
             )
             .setTimestamp()
             .setFooter({ text: 'StudioLearny Management System' });
