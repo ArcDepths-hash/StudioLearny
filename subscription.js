@@ -2,8 +2,8 @@
  * ============================================================================
  * @file subscription.js
  * @description StudioLearny Ticket-Based Subscription Engine
- * [Features: !setup command, Access Role Injection, Live Log Revocation Controls]
- * @version 3.1.0
+ * [Features: !setup command, !give coins admin utility, Access Role Injection, Live Log Revocation Controls]
+ * @version 3.2.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -69,12 +69,15 @@ client.once('ready', (instance) => {
 });
 
 // ============================================================================
-// TEXT TRIGGERS: !setup (OWNER LOCKED)
+// TEXT TRIGGERS: !setup & !give coins (OWNER LOCKED)
 // ============================================================================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    if (message.content.toLowerCase().trim() === '!setup') {
+    const normalizedContent = message.content.toLowerCase().trim();
+
+    // --- 1. THE SHOP DEPLOYMENT COMMAND ---
+    if (normalizedContent === '!setup') {
         if (message.author.id !== OWNER_ID) return;
         await message.delete().catch(() => null);
 
@@ -99,6 +102,34 @@ client.on('messageCreate', async (message) => {
         }
 
         await targetChannel.send({ embeds: [storeEmbed], components: [row] });
+    }
+
+    // --- 2. THE MINT/GIVE COINS UTILITY ---
+    if (normalizedContent.startsWith('!give coins')) {
+        if (message.author.id !== OWNER_ID) {
+            return message.reply("❌ You do not have permission to run coin minting transactions.");
+        }
+
+        // Split arguments safely handling varying spacing configurations
+        const args = message.content.trim().split(/\s+/);
+        // Expecting: args[0]='!give', args[1]='coins', args[2]='@user', args[3]='amount'
+
+        const targetUser = message.mentions.users.first();
+        const amount = parseInt(args[3]);
+
+        if (!targetUser || isNaN(amount)) {
+            return message.reply("⚠️ **Incorrect Syntax.** Use: `!give coins @username 1500`");
+        }
+
+        try {
+            // Commit transaction to disk ledger using the economy engine file layer
+            const finalLedgerBalance = economyEngine.updateBalance(targetUser.id, amount);
+
+            return message.channel.send(`🪙 **Transaction Logged:** Successfully deposited **${amount}** coins to ${targetUser}. Current Total: **${finalLedgerBalance}** coins.`);
+        } catch (error) {
+            console.error("Economy file update failed:", error);
+            return message.reply("❌ Structural error encountered updating your ledger data file.");
+        }
     }
 });
 
