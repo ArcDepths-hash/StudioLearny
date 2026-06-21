@@ -1,4 +1,4 @@
-const { Client, GatewayIntentBits, ActivityType, EmbedBuilder, ChannelType } = require('discord.js');
+const { Client, GatewayIntentBits, ActivityType, EmbedBuilder } = require('discord.js');
 const http = require('http');
 
 const client = new Client({
@@ -62,57 +62,7 @@ client.on('messageCreate', async (message) => {
     }
 
     // =======================================================
-    // 2. ADMINISTRATIVE COMMANDS (!clean dm)
-    // =======================================================
-    if (msgLower === '!clean dm') {
-        try {
-            // Open/fetch the target user's Direct Message channel object
-            const dmChannel = await message.author.createDM();
-            
-            // Send initial processing status message in public channel
-            const processingNotice = await message.reply('🧹 *Attempting to scrub historical bot footprints from your direct messages...*');
-
-            // Fetch the last 50 messages from the DM channel pipeline
-            const dmHistory = await dmChannel.messages.fetch({ limit: 50 });
-            
-            // Isolate only messages that were sent by this bot client instance
-            const botMessages = dmHistory.filter(msg => msg.author.id === client.user.id);
-
-            if (botMessages.size === 0) {
-                await processingNotice.edit('✨ Your DM history with this node is already empty or clear of active bot frames.');
-                setTimeout(() => processingNotice.delete().catch(() => null), 7000);
-                return;
-            }
-
-            let scrubbedCount = 0;
-            
-            // Sequentially edit the bot's messages down to empty markers or attempt direct deletion loops
-            for (const [id, botMsg] of botMessages) {
-                // Bots can delete their own text strings inside private DM contexts
-                await botMsg.delete().catch(async () => {
-                    // Fallback: If message age or state flags block absolute deletion, scrub content using systemic voids
-                    await botMsg.edit({ content: '▫️ *Session history cleared by user choice.*', embeds: [], components: [] }).catch(() => null);
-                });
-                scrubbedCount++;
-            }
-
-            // Update public processing notification to display success metrics
-            await processingNotice.edit(`✅ **Cleanup Sequence Complete.** Successfully cleared or voided \`${scrubbedCount}\` bot frames inside your private DM feed.`);
-            
-            // Clean up the public tracking notification after 7 seconds
-            setTimeout(() => processingNotice.delete().catch(() => null), 7000);
-            return;
-
-        } catch (error) {
-            console.error('[FAQ Engine Exception] Direct Message clean routine blocked:', error);
-            const failureNotice = await message.reply('❌ **Matrix Transmission Blundered:** Failed to execute full DM scrub. Ensure your account privacy permissions permit server-member communication updates.');
-            setTimeout(() => failureNotice.delete().catch(() => null), 7000);
-            return;
-        }
-    }
-
-    // =======================================================
-    // 3. MAXIMUM CAPACITY USER PHRASES LISTS (Conversational)
+    // 2. MAXIMUM CAPACITY USER PHRASES LISTS (Conversational)
     // =======================================================
     const botDismissals = [
         'no not you', 'not you', 'wrong bot', 'shutup bot', 'shut up bot', 
@@ -150,7 +100,7 @@ client.on('messageCreate', async (message) => {
     ];
 
     // =======================================================
-    // 4. LOGIC & TRIGGER CHECKS WITH SELF-CLEANUP
+    // 3. LOGIC & TRIGGER CHECKS WITH SELF-CLEANUP
     // =======================================================
 
     // --- CONTEXT CHECK: User dismissing the bot ---
@@ -161,7 +111,7 @@ client.on('messageCreate', async (message) => {
             recentClarifications.delete(userId);
             const dismissalReply = await message.reply('Understood. Apologies for the interruption.');
             
-            // Decays the apology message after 5 seconds to minimize channel pollution
+            // Auto-deletes the apology after 5 seconds to keep chat clean
             setTimeout(() => dismissalReply.delete().catch(() => null), 5000);
             return;
         }
@@ -176,7 +126,7 @@ client.on('messageCreate', async (message) => {
 
         const clarificationReply = await message.reply('could u clarify what u mean whit this');
 
-        // Decays the clarification prompt after 30 seconds
+        // Auto-deletes the prompt after 30 seconds so old channels stay tidy
         setTimeout(() => clarificationReply.delete().catch(() => null), 30000);
         return;
     }
@@ -187,7 +137,7 @@ client.on('messageCreate', async (message) => {
     if (isBrokenCode) {
         const staffRedirectReply = await message.reply('Please ask our moderation team or instructors for assistance.');
         
-        // Decays the assistance redirect block after 20 seconds
+        // Auto-deletes the redirection notification after 20 seconds
         setTimeout(() => staffRedirectReply.delete().catch(() => null), 20000);
         return;
     }
