@@ -201,7 +201,6 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.update({ content: '🥇 **Diamond Lesson Mode Activated.** Ready?', components: [row] });
         }
 
-
         // --- TRIGGER BASIC MODAL (1 Field) ---
         if (interaction.customId === 'start_basic_lesson') {
             const modal = new ModalBuilder().setCustomId('modal_basic').setTitle('Create Basic Lesson');
@@ -243,3 +242,95 @@ client.on('interactionCreate', async (interaction) => {
         // --- TRIGGER DIAMOND MODAL (3 Fields) ---
         if (interaction.customId === 'start_diamond_lesson') {
             const modal = new ModalBuilder().setCustomId('modal_diamond').setTitle('Create Diamond Lesson');
+            
+            const titleInput = new TextInputBuilder()
+                .setCustomId('diamond_title')
+                .setLabel('Custom Embed Title:')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
+
+            const contentInput = new TextInputBuilder()
+                .setCustomId('diamond_content')
+                .setLabel('Lesson Content:')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true);
+
+            const colorInput = new TextInputBuilder()
+                .setCustomId('diamond_color')
+                .setLabel('Embed Hex Color (e.g., #ff0000):')
+                .setStyle(TextInputStyle.Short)
+                .setPlaceholder('#00ffff')
+                .setRequired(false);
+            
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(titleInput),
+                new ActionRowBuilder().addComponents(contentInput),
+                new ActionRowBuilder().addComponents(colorInput)
+            );
+            await interaction.showModal(modal);
+            return interaction.message.delete().catch(() => null);
+        }
+    }
+
+    if (interaction.isModalSubmit()) {
+        // --- SUBMIT BASIC LESSON ---
+        if (interaction.customId === 'modal_basic') {
+            const content = interaction.fields.getTextInputValue('basic_content');
+            const embed = new EmbedBuilder()
+                .setColor('#555555')
+                .setTitle('📚 StudioLearny Standard Lesson')
+                .setDescription(content)
+                .setFooter({ text: `Instructor: ${interaction.user.username} (Basic Tier)` })
+                .setTimestamp();
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- SUBMIT GOLD LESSON ---
+        if (interaction.customId === 'modal_gold') {
+            const title = interaction.fields.getTextInputValue('gold_title');
+            const content = interaction.fields.getTextInputValue('gold_content');
+            const embed = new EmbedBuilder()
+                .setColor('#d4af37')
+                .setTitle(`🌟 ${title}`)
+                .setDescription(content)
+                .setFooter({ text: `Instructor: ${interaction.user.username} (Gold Tier)` })
+                .setTimestamp();
+            return interaction.reply({ embeds: [embed] });
+        }
+
+        // --- SUBMIT DIAMOND LESSON ---
+        if (interaction.customId === 'modal_diamond') {
+            const title = interaction.fields.getTextInputValue('diamond_title');
+            const content = interaction.fields.getTextInputValue('diamond_content');
+            let hexColor = interaction.fields.getTextInputValue('diamond_color') || '#00ffff';
+
+            if (hexColor && !hexColor.startsWith('#')) {
+                hexColor = `#${hexColor}`;
+            }
+
+            const isValidHex = /^#[0-9A-F]{6}$/i.test(hexColor);
+            const finalColor = isValidHex ? hexColor : '#00ffff';
+
+            const embed = new EmbedBuilder()
+                .setColor(finalColor)
+                .setTitle(`💎 ${title}`)
+                .setDescription(content)
+                .setFooter({ text: `Instructor: ${interaction.user.username} (Diamond Tier)` })
+                .setTimestamp();
+            return interaction.reply({ embeds: [embed] });
+        }
+    }
+});
+
+// Web Server for Railway hosting
+const server = http.createServer((req, res) => {
+    res.writeHead(200, { 'Content-Type': 'text/plain' });
+    res.end('StudioLearny System is fully operational!\n');
+});
+
+const PORT = process.env.PORT || 8080;
+server.listen(PORT, () => {
+    console.log(`Web server listening on port ${PORT}`);
+});
+
+client.login(process.env.DISCORD_TOKEN);
