@@ -1,8 +1,19 @@
+// ==================== CONFIGURATION ====================
+// 1. Put your exact Discord User ID here (Owner - always has access)
+const OWNER_ID = 'YOUR_DISCORD_USER_ID_HERE'; 
+
+// 2. Put your 3 Teacher Role IDs inside this array
+let authorizedRoles = [
+    'TEACHER_ROLE_ID_1',
+    'TEACHER_ROLE_ID_2',
+    'TEACHER_ROLE_ID_3'
+];
+// =======================================================
+
 const { 
     Client, 
     GatewayIntentBits, 
     ActivityType, 
-    PermissionFlagsBits,
     ActionRowBuilder,
     ButtonBuilder,
     ButtonStyle,
@@ -12,10 +23,7 @@ const {
     EmbedBuilder
 } = require('discord.js');
 const http = require('http');
-const fs = require('fs');
-const path = require('path');
 
-// 1. Initialize Client with required Intents
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
@@ -28,64 +36,14 @@ const client = new Client({
 const DEFAULT_PREFIX = '!';
 const guildPrefixes = new Map();
 
-// Storage files for persistent data
-const USERS_FILE = path.join(__dirname, 'authorized_users.json');
-const ROLES_FILE = path.join(__dirname, 'authorized_roles.json');
-
-// Load authorized users
-let authorizedUsers = [];
-if (fs.existsSync(USERS_FILE)) {
-    try {
-        authorizedUsers = JSON.parse(fs.readFileSync(USERS_FILE, 'utf8'));
-        console.log(`Loaded ${authorizedUsers.length} authorized users from storage.`);
-    } catch (err) {
-        console.error('Error reading authorized users file:', err);
-    }
-}
-
-// Load authorized roles
-let authorizedRoles = [];
-if (fs.existsSync(ROLES_FILE)) {
-    try {
-        authorizedRoles = JSON.parse(fs.readFileSync(ROLES_FILE, 'utf8'));
-        console.log(`Loaded ${authorizedRoles.length} authorized roles from storage.`);
-    } catch (err) {
-        console.error('Error reading authorized roles file:', err);
-    }
-}
-
-// Helper functions to write changes immediately
-function saveAuthorizedUsers() {
-    try {
-        fs.writeFileSync(USERS_FILE, JSON.stringify(authorizedUsers, null, 4), 'utf8');
-    } catch (err) {
-        console.error('Failed to save authorized users file:', err);
-    }
-}
-
-function saveAuthorizedRoles() {
-    try {
-        fs.writeFileSync(ROLES_FILE, JSON.stringify(authorizedRoles, null, 4), 'utf8');
-    } catch (err) {
-        console.error('Failed to save authorized roles file:', err);
-    }
-}
-
-// 2. The Setup Event
 client.once('ready', (c) => {
-    console.log(`Bot is online! Default prefix: ${DEFAULT_PREFIX}`);
-    console.log(`Logged in as ${c.user.tag}`);
-    
+    console.log(`Bot is online! Logged in as ${c.user.tag}`);
     client.user.setPresence({
         status: 'online',
-        activities: [{
-            name: `for lessons`, 
-            type: ActivityType.Listening
-        }]
+        activities: [{ name: `for lessons`, type: ActivityType.Listening }]
     });
 });
 
-// 3. Command and Interaction Handler
 client.on('messageCreate', (message) => {
     if (!message.guild || message.author.bot) return;
 
@@ -95,85 +53,21 @@ client.on('messageCreate', (message) => {
     const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
     const command = args.shift().toLowerCase();
 
-    // --- USER MANAGEMENT COMMANDS ---
-    if (command === 'authorize') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You do not have the required Administrator permission.');
-        }
-        const targetUser = message.mentions.users.first();
-        if (!targetUser) return message.reply(`❌ Please mention a user. Example: \`${currentPrefix}authorize @user\``);
-
-        if (authorizedUsers.includes(targetUser.id)) return message.reply(`⚠️ ${targetUser.username} is already authorized.`);
-        
-        authorizedUsers.push(targetUser.id);
-        saveAuthorizedUsers();
-        return message.reply(`✅ Success! ${targetUser.username} has been individually authorized.`);
-    }
-
-    if (command === 'unauthorize') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You do not have the required Administrator permission.');
-        }
-        const targetUser = message.mentions.users.first();
-        if (!targetUser) return message.reply(`❌ Please mention a user. Example: \`${currentPrefix}unauthorize @user\``);
-
-        const index = authorizedUsers.indexOf(targetUser.id);
-        if (index === -1) return message.reply(`⚠️ ${targetUser.username} is not currently authorized.`);
-
-        authorizedUsers.splice(index, 1);
-        saveAuthorizedUsers();
-        return message.reply(`✅ Success! ${targetUser.username} has been removed.`);
-    }
-
-    // --- ROLE MANAGEMENT COMMANDS ---
-    if (command === 'authorizerole' || command === 'authoriserole') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You do not have the required Administrator permission.');
-        }
-        const targetRole = message.mentions.roles.first();
-        if (!targetRole) return message.reply(`❌ Please mention a role. Example: \`${currentPrefix}authorizerole @Teacher\``);
-
-        if (authorizedRoles.includes(targetRole.id)) return message.reply(`⚠️ The role ${targetRole.name} is already authorized.`);
-
-        authorizedRoles.push(targetRole.id);
-        saveAuthorizedRoles();
-        return message.reply(`✅ Success! Anyone with the **${targetRole.name}** role is now authorized to teach.`);
-    }
-
-    if (command === 'unauthorizerole' || command === 'unauthoriserole') {
-        if (!message.member.permissions.has(PermissionFlagsBits.Administrator)) {
-            return message.reply('❌ You do not have the required Administrator permission.');
-        }
-        const targetRole = message.mentions.roles.first();
-        if (!targetRole) return message.reply(`❌ Please mention a role. Example: \`${currentPrefix}unauthorizerole @Teacher\``);
-
-        const index = authorizedRoles.indexOf(targetRole.id);
-        if (index === -1) return message.reply(`⚠️ The role ${targetRole.name} is not currently authorized.`);
-
-        authorizedRoles.splice(index, 1);
-        saveAuthorizedRoles();
-        return message.reply(`✅ Success! The **${targetRole.name}** role has been removed from authorization.`);
-    }
-
-    // --- DISPLAY LISTS ---
+    // --- DISPLAY AUTHORIZED ROLES ---
     if (command === 'authorized' || command === 'authorised') {
-        const userMentions = authorizedUsers.length > 0 
-            ? authorizedUsers.map(id => `<@${id}> (ID: ${id})`).join('\n') 
-            : '*None designated individually*';
-
         const roleMentions = authorizedRoles.length > 0 
             ? authorizedRoles.map(id => `<@&${id}> (ID: ${id})`).join('\n') 
-            : '*None designated*';
+            : '*No teacher roles configured in code*';
 
         const listEmbed = new EmbedBuilder()
             .setColor('#1a1a1a')
-            .setTitle('👥 StudioLearny Access Panel')
+            .setTitle('🛡️ StudioLearny Staff Access')
             .addFields(
-                { name: '👤 Individually Authorized Users', value: userMentions },
-                { name: '🛡️ Authorized Roles (Anyone with these has access)', value: roleMentions }
+                { name: '👑 Bot Owner', value: `<@${OWNER_ID}>` },
+                { name: '👥 Authorized Teaching Roles', value: roleMentions }
             )
             .setTimestamp()
-            .setFooter({ text: `Users: ${authorizedUsers.length} | Roles: ${authorizedRoles.length}` });
+            .setFooter({ text: `Total Roles: ${authorizedRoles.length}` });
 
         return message.reply({ embeds: [listEmbed] });
     }
@@ -192,25 +86,19 @@ client.on('messageCreate', (message) => {
         return message.reply(`The current prefix is \`${currentPrefix}\`.`);
     }
 
-    // --- LESSON COMMAND (CHECKS USERS AND ROLES) ---
+    // --- LESSON COMMAND ---
     if (command === 'lesson') {
-        // Check if user is individually authorized OR has any of the allowed roles
-        const isUserAuthorized = authorizedUsers.includes(message.author.id);
+        const isOwner = message.author.id === OWNER_ID;
         const hasAuthorizedRole = message.member.roles.cache.some(role => authorizedRoles.includes(role.id));
 
-        if (!isUserAuthorized && !hasAuthorizedRole) {
+        // Must be the owner OR have one of your 3 teacher roles
+        if (!isOwner && !hasAuthorizedRole) {
             return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
         }
 
         const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder()
-                .setCustomId('lesson_mistake')
-                .setLabel('I made a mistake')
-                .setStyle(ButtonStyle.Danger),
-            new ButtonBuilder()
-                .setCustomId('lesson_write')
-                .setLabel('Write lesson')
-                .setStyle(ButtonStyle.Success)
+            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('I made a mistake').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('lesson_write').setLabel('Write lesson').setStyle(ButtonStyle.Success)
         );
 
         return message.reply({
@@ -273,7 +161,7 @@ client.on('interactionCreate', async (interaction) => {
 // Web Server for Railway
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Persistent Tutor Bot is running!\n');
+    res.end('StudioLearny Bot is running!\n');
 });
 
 const PORT = process.env.PORT || 8080;
@@ -281,5 +169,4 @@ server.listen(PORT, () => {
     console.log(`Web server listening on port ${PORT}`);
 });
 
-// Connect
 client.login(process.env.DISCORD_TOKEN);
