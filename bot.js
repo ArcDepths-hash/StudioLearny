@@ -1,12 +1,12 @@
 // ==================== CONFIGURATION ====================
 // 1. Put your exact Discord User ID here (Owner - always has access)
-const OWNER_ID = 'YOUR_DISCORD_USER_ID_HERE'; 
+const OWNER_ID = '1511377539073966353'; 
 
 // 2. Put your 3 Teacher Role IDs inside this array
 let authorizedRoles = [
-    'TEACHER_ROLE_ID_1',
-    'TEACHER_ROLE_ID_2',
-    'TEACHER_ROLE_ID_3'
+    '1518179501056458792',
+    '1518179528545931463',
+    '1518179554563194910'
 ];
 // =======================================================
 
