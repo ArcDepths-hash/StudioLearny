@@ -1,13 +1,10 @@
 // ==================== CONFIGURATION ====================
-// 1. Put your exact Discord User ID here (Owner - always has access)
-const OWNER_ID = '1511377539073966353'; 
+const OWNER_ID = '151137753907966353'; 
 
-// 2. Put your 3 Teacher Role IDs inside this array
-let authorizedRoles = [
-    '1518179501056458792',
-    '1518179528545931463',
-    '1518179554563194910'
-];
+// Separate your teacher roles by tier
+const BASIC_TEACHER_ROLE_ID   = '151817950105645872';
+const GOLDEN_TEACHER_ROLE_ID  = '151817952854593146';
+const DIAMOND_TEACHER_ROLE_ID = '151817955456319491';
 // =======================================================
 
 const { 
@@ -33,76 +30,118 @@ const client = new Client({
     ]
 });
 
-const DEFAULT_PREFIX = '!';
-const guildPrefixes = new Map();
-
 client.once('ready', (c) => {
     console.log(`Bot is online! Logged in as ${c.user.tag}`);
     client.user.setPresence({
         status: 'online',
-        activities: [{ name: `for lessons`, type: ActivityType.Listening }]
+        activities: [{ name: `StudioLearny Lessons`, type: ActivityType.Listening }]
     });
 });
 
 client.on('messageCreate', (message) => {
     if (!message.guild || message.author.bot) return;
 
-    const currentPrefix = guildPrefixes.get(message.guild.id) || DEFAULT_PREFIX;
-    if (!message.content.startsWith(currentPrefix)) return;
+    const msgLower = message.content.toLowerCase().trim();
+    const isOwner = message.author.id === OWNER_ID;
+    
+    // Cache check for all roles
+    const hasBasic = message.member.roles.cache.has(BASIC_TEACHER_ROLE_ID);
+    const hasGold = message.member.roles.cache.has(GOLDEN_TEACHER_ROLE_ID);
+    const hasDiamond = message.member.roles.cache.has(DIAMOND_TEACHER_ROLE_ID);
+    const isAnyTeacher = isOwner || hasBasic || hasGold || hasDiamond;
 
-    const args = message.content.slice(currentPrefix.length).trim().split(/ +/);
-    const command = args.shift().toLowerCase();
-
-    // --- DISPLAY AUTHORIZED ROLES ---
-    if (command === 'authorized' || command === 'authorised') {
-        const roleMentions = authorizedRoles.length > 0 
-            ? authorizedRoles.map(id => `<@&${id}> (ID: ${id})`).join('\n') 
-            : '*No teacher roles configured in code*';
-
+    // --- DISPLAY AUTHORIZED ROLES & RANKS ---
+    if (msgLower === '!authorized' || msgLower === '!authorised') {
         const listEmbed = new EmbedBuilder()
             .setColor('#1a1a1a')
-            .setTitle('🛡️ StudioLearny Staff Access')
+            .setTitle('🛡️ StudioLearny Staff Access & Hierarchy')
+            .setDescription('Here is the official staff lineup and the specific rank permissions assigned to each role:')
             .addFields(
-                { name: '👑 Bot Owner', value: `<@${OWNER_ID}>` },
-                { name: '👥 Authorized Teaching Roles', value: roleMentions }
+                { name: '👑 Bot Owner', value: `<@${OWNER_ID}> (Full Developer Access)`, inline: false },
+                { name: '🥇 Diamond Tier', value: `<@&${DIAMOND_TEACHER_ROLE_ID}>\n*Perks: Custom Titles, Content, and Hex Colors*`, inline: false },
+                { name: '🥈 Golden Tier', value: `<@&${GOLDEN_TEACHER_ROLE_ID}>\n*Perks: Custom Titles and Content*`, inline: false },
+                { name: '🥉 Basic Tier', value: `<@&${BASIC_TEACHER_ROLE_ID}>\n*Perks: Standard Template Lessons*`, inline: false }
             )
             .setTimestamp()
-            .setFooter({ text: `Total Roles: ${authorizedRoles.length}` });
+            .setFooter({ text: 'StudioLearny Management System' });
 
         return message.reply({ embeds: [listEmbed] });
     }
 
-    // --- PREFIX CONFIGURATION ---
-    if (command === 'prefix') {
-        const subCommand = args[0]?.toLowerCase();
-        if (subCommand === 'set') {
-            const newPrefix = args[1];
-            if (!newPrefix) return message.reply(`❌ Please specify a new prefix.`);
-            if (newPrefix.length > 3) return message.reply('❌ The prefix must be 3 characters or less.');
-
-            guildPrefixes.set(message.guild.id, newPrefix);
-            return message.reply(`✅ Success! Prefix changed to \`${newPrefix}\`.`);
-        }
-        return message.reply(`The current prefix is \`${currentPrefix}\`.`);
-    }
-
-    // --- LESSON COMMAND ---
-    if (command === 'lesson') {
-        const isOwner = message.author.id === OWNER_ID;
-        const hasAuthorizedRole = message.member.roles.cache.some(role => authorizedRoles.includes(role.id));
-
-        // Must be the owner OR have one of your 3 teacher roles
-        if (!isOwner && !hasAuthorizedRole) {
+    // =======================================================
+    // MAIN MASTER LESSON COMMAND (WITH TIER SELECTION BUTTONS)
+    // =======================================================
+    if (msgLower === '!lesson') {
+        if (!isAnyTeacher) {
             return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
         }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('I made a mistake').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('lesson_write').setLabel('Write lesson').setStyle(ButtonStyle.Success)
+        const menuRow = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('menu_basic').setLabel('Basic Teacher').setStyle(ButtonStyle.Primary),
+            new ButtonBuilder().setCustomId('menu_gold').setLabel('Golden Teacher').setStyle(ButtonStyle.Success),
+            new ButtonBuilder().setCustomId('menu_diamond').setLabel('Diamond Teacher').setStyle(ButtonStyle.Secondary),
+            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger)
         );
 
         return message.reply({
-            content: '👋 Welcome teacher, what are we doing today?',
+            content: '👋 **StudioLearny Lesson Portal**\nWhich teaching tier setup would you like to open today?',
+            components: [menuRow]
+        });
+    }
+
+    // =======================================================
+    // SHORTCUT 1: BASIC LESSON COMMAND
+    // =======================================================
+    if (msgLower === '!basic lesson') {
+        if (!isAnyTeacher) {
+            return message.reply('❌ You must be at least a Basic Teacher to use this command.');
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('start_basic_lesson').setLabel('Write Basic Lesson').setStyle(ButtonStyle.Primary)
+        );
+
+        return message.reply({
+            content: '🥉 **Basic Lesson Setup Shortcut**\nReady to post a standard text lesson?',
+            components: [row]
+        });
+    }
+
+    // =======================================================
+    // SHORTCUT 2: GOLD LESSON COMMAND
+    // =======================================================
+    if (msgLower === '!gold lesson') {
+        if (!isOwner && !hasGold && !hasDiamond) {
+            return message.reply('❌ You must be at least a Golden Teacher to use this command.');
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('start_gold_lesson').setLabel('Write Gold Lesson').setStyle(ButtonStyle.Success)
+        );
+
+        return message.reply({
+            content: '🥈 **Gold Lesson Setup Shortcut**\nReady to post a lesson with custom titles?',
+            components: [row]
+        });
+    }
+
+    // =======================================================
+    // SHORTCUT 3: DIAMOND LESSON COMMAND
+    // =======================================================
+    if (msgLower === '!diamond lesson') {
+        if (!isOwner && !hasDiamond) {
+            return message.reply('❌ You must be a Diamond Teacher to use this command.');
+        }
+
+        const row = new ActionRowBuilder().addComponents(
+            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+            new ButtonBuilder().setCustomId('start_diamond_lesson').setLabel('Write Diamond Lesson').setStyle(ButtonStyle.Secondary)
+        );
+
+        return message.reply({
+            content: '🥇 **Diamond Lesson Setup Shortcut**\nFull access: Custom titles, descriptions, and hex colors enabled.',
             components: [row]
         });
     }
@@ -111,6 +150,12 @@ client.on('messageCreate', (message) => {
 // Handling Button clicks and Form submissions
 client.on('interactionCreate', async (interaction) => {
     if (interaction.isButton()) {
+        const isOwner = interaction.user.id === OWNER_ID;
+        const hasBasic = interaction.member.roles.cache.has(BASIC_TEACHER_ROLE_ID);
+        const hasGold = interaction.member.roles.cache.has(GOLDEN_TEACHER_ROLE_ID);
+        const hasDiamond = interaction.member.roles.cache.has(DIAMOND_TEACHER_ROLE_ID);
+
+        // Security check: Only allow the person who sent the command to interact
         if (interaction.message.reference) {
             const originalMsg = await interaction.channel.messages.fetch(interaction.message.reference.messageId).catch(() => null);
             if (originalMsg && interaction.user.id !== originalMsg.author.id) {
@@ -122,51 +167,79 @@ client.on('interactionCreate', async (interaction) => {
             return interaction.update({ content: '❌ Action cancelled.', components: [] });
         }
 
-        if (interaction.customId === 'lesson_write') {
-            const modal = new ModalBuilder()
-                .setCustomId('lesson_modal')
-                .setTitle('Create Coding Lesson');
+        // --- MASTER MENU DIRECTION + ROLE CHECKS ---
+        if (interaction.customId === 'menu_basic') {
+            if (!isOwner && !hasBasic && !hasGold && !hasDiamond) {
+                return interaction.reply({ content: '❌ Access Denied: You do not have the Basic Teacher role!', ephemeral: true });
+            }
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('start_basic_lesson').setLabel('Confirm & Write Basic Lesson').setStyle(ButtonStyle.Primary)
+            );
+            return interaction.update({ content: '🥉 **Basic Lesson Mode Activated.** Ready?', components: [row] });
+        }
 
-            const lessonInput = new TextInputBuilder()
-                .setCustomId('lesson_content_input')
-                .setLabel('Enter your lesson text below:')
+        if (interaction.customId === 'menu_gold') {
+            if (!isOwner && !hasGold && !hasDiamond) {
+                return interaction.reply({ content: '❌ Access Denied: You do not have the Golden Teacher role!', ephemeral: true });
+            }
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('start_gold_lesson').setLabel('Confirm & Write Gold Lesson').setStyle(ButtonStyle.Success)
+            );
+            return interaction.update({ content: '🥈 **Gold Lesson Mode Activated.** Ready?', components: [row] });
+        }
+
+        if (interaction.customId === 'menu_diamond') {
+            if (!isOwner && !hasDiamond) {
+                return interaction.reply({ content: '❌ Access Denied: You do not have the Diamond Teacher role!', ephemeral: true });
+            }
+            const row = new ActionRowBuilder().addComponents(
+                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
+                new ButtonBuilder().setCustomId('start_diamond_lesson').setLabel('Confirm & Write Diamond Lesson').setStyle(ButtonStyle.Secondary)
+            );
+            return interaction.update({ content: '🥇 **Diamond Lesson Mode Activated.** Ready?', components: [row] });
+        }
+
+
+        // --- TRIGGER BASIC MODAL (1 Field) ---
+        if (interaction.customId === 'start_basic_lesson') {
+            const modal = new ModalBuilder().setCustomId('modal_basic').setTitle('Create Basic Lesson');
+            const input = new TextInputBuilder()
+                .setCustomId('basic_content')
+                .setLabel('Lesson Content:')
                 .setStyle(TextInputStyle.Paragraph)
-                .setPlaceholder('Type your code block, instructions, or challenges here...')
                 .setRequired(true);
-
-            const firstActionRow = new ActionRowBuilder().addComponents(lessonInput);
-            modal.addComponents(firstActionRow);
-
+            
+            modal.addComponents(new ActionRowBuilder().addComponents(input));
             await interaction.showModal(modal);
             return interaction.message.delete().catch(() => null);
         }
-    }
 
-    if (interaction.isModalSubmit()) {
-        if (interaction.customId === 'lesson_modal') {
-            const lessonText = interaction.fields.getTextInputValue('lesson_content_input');
+        // --- TRIGGER GOLD MODAL (2 Fields) ---
+        if (interaction.customId === 'start_gold_lesson') {
+            const modal = new ModalBuilder().setCustomId('modal_gold').setTitle('Create Golden Lesson');
+            
+            const titleInput = new TextInputBuilder()
+                .setCustomId('gold_title')
+                .setLabel('Custom Embed Title:')
+                .setStyle(TextInputStyle.Short)
+                .setRequired(true);
 
-            const lessonEmbed = new EmbedBuilder()
-                .setColor('#1a1a1a')
-                .setTitle('📚 StudioLearny Live Lesson')
-                .setDescription(lessonText)
-                .setTimestamp()
-                .setFooter({ text: `Instructor: ${interaction.user.username}` });
-
-            await interaction.reply({ embeds: [lessonEmbed] });
+            const contentInput = new TextInputBuilder()
+                .setCustomId('gold_content')
+                .setLabel('Lesson Content:')
+                .setStyle(TextInputStyle.Paragraph)
+                .setRequired(true);
+            
+            modal.addComponents(
+                new ActionRowBuilder().addComponents(titleInput),
+                new ActionRowBuilder().addComponents(contentInput)
+            );
+            await interaction.showModal(modal);
+            return interaction.message.delete().catch(() => null);
         }
-    }
-});
 
-// Web Server for Railway
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('StudioLearny Bot is running!\n');
-});
-
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-    console.log(`Web server listening on port ${PORT}`);
-});
-
-client.login(process.env.DISCORD_TOKEN);
+        // --- TRIGGER DIAMOND MODAL (3 Fields) ---
+        if (interaction.customId === 'start_diamond_lesson') {
+            const modal = new ModalBuilder().setCustomId('modal_diamond').setTitle('Create Diamond Lesson');
