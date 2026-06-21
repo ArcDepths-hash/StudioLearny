@@ -2,7 +2,8 @@
  * ============================================================================
  * @file bot.js
  * @description Advanced StudioLearny Lesson Dispatch & Infrastructure Bot
- * @version 3.0.0
+ * [Upgraded: Dynamic Single-Message DM UI Framework]
+ * @version 3.1.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -87,7 +88,6 @@ client.once('ready', async (instance) => {
 // ============================================================================
 // 3. INTERNAL DATA CLEANUP SWEEPER INTERVALS
 // ============================================================================
-// Scans wizard profiles every 60 seconds to prune abandoned dead session files
 setInterval(() => {
     const expirationThreshold = 15 * 60 * 1000; // 15 Minute absolute maximum window
     const dynamicNow = Date.now();
@@ -99,9 +99,19 @@ setInterval(() => {
             sweepCount++;
             metricsEngine.wizardsFailed++;
             
-            // Attempt to silently notify the user via DM that their timeout collapsed
+            // Attempt to clean/edit the lingering message to an expired state before closing memory loops
             client.users.fetch(userId).then(async (user) => {
-                await user.send('⚠️ **Session Expired:** Your lesson draft was discarded due to 15 minutes of user inactivity. Please start over.').catch(() => null);
+                const dmChannel = await user.createDM().catch(() => null);
+                if (dmChannel && record.wizardMessageId) {
+                    const mainMsg = await dmChannel.messages.fetch(record.wizardMessageId).catch(() => null);
+                    if (mainMsg) {
+                        const timeoutEmbed = new EmbedBuilder()
+                            .setColor('#e74c3c')
+                            .setTitle('⚠️ Session Expired')
+                            .setDescription('Your lesson drafting panel collapsed due to 15 minutes of user inactivity. Please request a new setup console.');
+                        await mainMsg.edit({ embeds: [timeoutEmbed] }).catch(() => null);
+                    }
+                }
             }).catch(() => null);
         }
     }
@@ -115,7 +125,6 @@ setInterval(() => {
 // 4. MAIN CHAT COMMAND ROUTING MATRIX
 // ============================================================================
 client.on('messageCreate', async (message) => {
-    // Structural Guard Filters
     if (message.author.bot) return;
     
     const tokenizedArgs = message.content.split(/\s+/);
@@ -131,9 +140,8 @@ client.on('messageCreate', async (message) => {
         const baseReportEmbed = new EmbedBuilder()
             .setTitle('🖥️ StudioLearny Authorization Framework Diagnostics')
             .setTimestamp()
-            .setFooter({ text: 'Engine Version: 3.0.0-Prod • Core Architecture Active' });
+            .setFooter({ text: 'Engine Version: 3.1.0-Prod • Core Architecture Active' });
 
-        // Evaluator Block A: Root Administrator Checks
         if (message.author.id === OWNER_ID) {
             const upTimeMs = Date.now() - metricsEngine.bootTime.getTime();
             const days = Math.floor(upTimeMs / (24 * 60 * 60 * 1000));
@@ -153,7 +161,6 @@ client.on('messageCreate', async (message) => {
             return message.reply({ embeds: [baseReportEmbed] });
         }
 
-        // Evaluator Block B: Multi-tiered Staff Context Resolvers
         if (!message.guild) {
             baseReportEmbed.setColor('#e74c3c')
                 .setDescription('❌ **Context Execution Error:** Staff role evaluations require an active Guild context channel environment.');
@@ -200,7 +207,6 @@ client.on('messageCreate', async (message) => {
         const contextualMember = message.member;
         if (!contextualMember) return;
 
-        // Perform dynamic structural role token audits prior to displaying buttons
         const userHasBasic = contextualMember.roles.cache.has(ROLES.Basic);
         const userHasGolden = contextualMember.roles.cache.has(ROLES.Golden);
         const userHasDiamond = contextualMember.roles.cache.has(ROLES.Diamond);
@@ -212,7 +218,6 @@ client.on('messageCreate', async (message) => {
 
         logger.info(`Instantiating UI layout sequence inside channel ${message.channelId} for candidate: ${message.author.id}`);
 
-        // Construct high-grade Component rows using programmatic validation configurations
         const interactiveActionRow = new ActionRowBuilder()
             .addComponents(
                 new ButtonBuilder()
@@ -265,7 +270,7 @@ client.on('interactionCreate', async (interaction) => {
     };
 
     const evaluatedTargetTier = systemTierIdentifiers[interaction.customId];
-    if (!evaluatedTargetTier) return; // Unrecognized internal execution path
+    if (!evaluatedTargetTier) return; 
 
     const userId = interaction.user.id;
     const requiredCryptographicRole = ROLES[evaluatedTargetTier];
@@ -273,7 +278,6 @@ client.on('interactionCreate', async (interaction) => {
 
     if (!originalTargetGuild) return;
 
-    // Secure operational verification against real-time API states
     const activeMemberObject = await originalTargetGuild.members.fetch(userId).catch(() => null);
     if (!activeMemberObject) {
         return interaction.reply({ content: '❌ **State Resolver Error:** The core could not safely fetch your member profile state across this cluster.', ephemeral: true });
@@ -291,7 +295,6 @@ client.on('interactionCreate', async (interaction) => {
 
     metricsEngine.wizardsStarted++;
 
-    // Purge historical loops to reset heap leaks
     if (activeWizards.has(userId)) {
         activeWizards.delete(userId);
     }
@@ -299,13 +302,26 @@ client.on('interactionCreate', async (interaction) => {
     try {
         const directCommsPipe = await interaction.user.createDM();
 
-        // Instantiate core transactional structure map inside RAM allocations
+        const queryStepOneEmbed = new EmbedBuilder()
+            .setTitle(`🎬 Curriculum Wizard Deployment Panel • [${evaluatedTargetTier.toUpperCase()} MODE]`)
+            .setDescription(`Greetings ${activeMemberObject.displayName},\nLet's build your learning layout frame step by step.`)
+            .addFields({ 
+                name: '📝 STEP 1: Primary Core Header Title', 
+                value: 'Please reply directly to this message with your intended lesson **Headline Title**.\n*(Constraint Limits: 3 - 100 characters total)*' 
+            })
+            .setColor('#2ecc71')
+            .setFooter({ text: 'Warning: This pipeline tracking frame will auto-terminate after 15 minutes of inactivity.' });
+
+        const wizardMessage = await directCommsPipe.send({ embeds: [queryStepOneEmbed] });
+
+        // Instantiate RAM record with saved message configuration ID tracking points
         activeWizards.set(userId, {
             tier: evaluatedTargetTier,
             targetChannelId: interaction.channelId,
             guildId: interaction.guildId,
             startedAt: Date.now(),
             step: 1,
+            wizardMessageId: wizardMessage.id, // <-- CRITICAL: Retain frame pointer ID
             data: {
                 title: null,
                 outline: null,
@@ -322,18 +338,6 @@ client.on('interactionCreate', async (interaction) => {
             ephemeral: true
         });
 
-        const queryStepOneEmbed = new EmbedBuilder()
-            .setTitle(`🎬 Curriculum Wizard Deployment Panel • [${evaluatedTargetTier.toUpperCase()} MODE]`)
-            .setDescription(`Greetings ${activeMemberObject.displayName},\nLet\'s build your learning layout frame step by step.`)
-            .addFields({ 
-                name: '📝 STEP 1: Primary Core Header Title', 
-                value: 'Please reply directly to this message with your intended lesson **Headline Title**.\n*(Constraint Limits: 3 - 100 character characters total)*' 
-            })
-            .setColor('#2ecc71')
-            .setFooter({ text: 'Warning: This pipeline tracking frame will auto-terminate after 15 minutes of inactivity.' });
-
-        await directCommsPipe.send({ embeds: [queryStepOneEmbed] });
-
     } catch (concurrencyError) {
         logger.error(`Failed to lock onto DM channels with target node user: ${userId}`, concurrencyError);
         metricsEngine.wizardsFailed++;
@@ -348,25 +352,40 @@ client.on('interactionCreate', async (interaction) => {
 // 6. DM DATA HARVESTER CORE (CONVERSATIONAL STATE PIPELINE)
 // ============================================================================
 client.on('messageCreate', async (message) => {
-    // Structural isolation boundary enforcement
     if (message.channel.type !== ChannelType.DM || message.author.bot) return;
 
     const userId = message.author.id;
     const dynamicSessionState = activeWizards.get(userId);
 
-    // Escape execution sequence loop instantly if no valid configuration map is bound to the worker node
     if (!dynamicSessionState) return;
 
     const normalizedRawPayload = message.content.trim();
 
     try {
+        // Fetch the active single layout core message from DM channel history cache
+        const mainWizardMessage = await message.channel.messages.fetch(dynamicSessionState.wizardMessageId).catch(() => null);
+        
+        // 🧼 AUTOMATIC USER TEXT CLEANUP: Instantly delete the teacher's typed payload
+        await message.delete().catch(() => null);
+
+        if (!mainWizardMessage) {
+            activeWizards.delete(userId);
+            metricsEngine.wizardsFailed++;
+            return message.channel.send('❌ **UI Frame Anchoring Defect:** The tracking display setup link was severed. Please initialize a new session command (`!lesson`) inside the server workspace.');
+        }
+
         // --------------------------------------------------------------------
         // STATE PIPELINE STEP 1: EXTRACT HEADLINE TITLE
         // --------------------------------------------------------------------
         if (dynamicSessionState.step === 1) {
             if (normalizedRawPayload.length < 3 || normalizedRawPayload.length > 100) {
-                return message.reply('⚠️ **Structural Integrity Fault:** Lesson Titles cannot be shorter than 3 characters or extend past 100 characters. Please re-submit a cleaner title variation:');
+                const retryEmbed1 = new EmbedBuilder()
+                    .setColor('#e74c3c')
+                    .setTitle('⚠️ Structural Integrity Fault')
+                    .setDescription('Lesson Titles cannot be shorter than 3 characters or extend past 100 characters.\n\nPlease type and re-submit a cleaner title variation below:');
+                return await mainWizardMessage.edit({ embeds: [retryEmbed1] }).catch(() => null);
             }
+            
             dynamicSessionState.data.title = normalizedRawPayload;
             dynamicSessionState.step = 2;
 
@@ -374,7 +393,8 @@ client.on('messageCreate', async (message) => {
                 .setColor('#3498db')
                 .setTitle('📖 Step 2: Comprehensive Lesson Concept Outline')
                 .setDescription('Please write a robust description summary mapping out exactly what metrics and technologies are going to be examined within this academic lesson block.\n\n*(Constraint Limits: 10 - 1000 characters maximum)*');
-            return message.reply({ embeds: [transitionEmbed2] });
+            
+            return await mainWizardMessage.edit({ embeds: [transitionEmbed2] }).catch(() => null);
         }
 
         // --------------------------------------------------------------------
@@ -382,8 +402,13 @@ client.on('messageCreate', async (message) => {
         // --------------------------------------------------------------------
         if (dynamicSessionState.step === 2) {
             if (normalizedRawPayload.length < 10 || normalizedRawPayload.length > 1000) {
-                return message.reply(`⚠️ **Structural Integrity Fault:** Your content outline submission must be reasonably descriptive. Your response contained \`${normalizedRawPayload.length}\` characters. Ensure it spans between 10 and 1000 characters:`);
+                const retryEmbed2 = new EmbedBuilder()
+                    .setColor('#e74c3c')
+                    .setTitle('⚠️ Structural Integrity Fault')
+                    .setDescription(`Your content outline submission must be reasonably descriptive. Your response contained \`${normalizedRawPayload.length}\` characters. Ensure it spans between 10 and 1000 characters:`);
+                return await mainWizardMessage.edit({ embeds: [retryEmbed2] }).catch(() => null);
             }
+            
             dynamicSessionState.data.outline = normalizedRawPayload;
             dynamicSessionState.step = 3;
 
@@ -391,7 +416,8 @@ client.on('messageCreate', async (message) => {
                 .setColor('#9b59b6')
                 .setTitle('🔗 Step 3: Material Distribution Hyperlink / URL Asset')
                 .setDescription('Please submit a fully functional external web address linking out to your codebases or notes repositories (e.g., `https://github.com/`).\n\n*If this module does not rely on an external destination platform, reply with `none`.*');
-            return message.reply({ embeds: [transitionEmbed3] });
+            
+            return await mainWizardMessage.edit({ embeds: [transitionEmbed3] }).catch(() => null);
         }
 
         // --------------------------------------------------------------------
@@ -401,24 +427,26 @@ client.on('messageCreate', async (message) => {
             if (normalizedRawPayload.toLowerCase() !== 'none') {
                 const standardizedUrlValidatorPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/i;
                 if (!standardizedUrlValidatorPattern.test(normalizedRawPayload)) {
-                    return message.reply('❌ **Format Compilation Rejection:** The compiler failed to securely parse your input line as a valid network URL trajectory point. Provide a secure path starting with `http://` or `https://`, or submit `none`:');
+                    const retryEmbed3 = new EmbedBuilder()
+                        .setColor('#e74c3c')
+                        .setTitle('❌ Format Compilation Rejection')
+                        .setDescription('The compiler failed to securely parse your input line as a valid network URL trajectory point. Provide a secure path starting with `http://` or `https://`, or submit `none`:');
+                    return await mainWizardMessage.edit({ embeds: [retryEmbed3] }).catch(() => null);
                 }
                 dynamicSessionState.data.linkUrl = normalizedRawPayload;
             } else {
                 dynamicSessionState.data.linkUrl = null;
             }
 
-            // Divergence calculations determined via internal subscription permissions map
             if (dynamicSessionState.tier === 'Golden' || dynamicSessionState.tier === 'Diamond') {
                 dynamicSessionState.step = 4;
                 const transitionEmbed4 = new EmbedBuilder()
                     .setColor('#f1c40f')
                     .setTitle('🎨 Step 4: [Tier-Exclusive Benefit] Hex Sidebar Customization')
                     .setDescription('As an authenticated VIP tier instructor asset, you hold rights to overwrite global styling modules.\n\nPlease supply a valid Hexadecimal string sequence (e.g., `#ff0055` or `00ffcc`) to brand your frame borders, or type `default`.');
-                return message.reply({ embeds: [transitionEmbed4] });
+                return await mainWizardMessage.edit({ embeds: [transitionEmbed4] }).catch(() => null);
             } else {
-                // Route Standard Tier straight to finalize
-                return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+                return buildAndDispatchLessonManifest(mainWizardMessage, dynamicSessionState, userId);
             }
         }
 
@@ -429,7 +457,11 @@ client.on('messageCreate', async (message) => {
             if (normalizedRawPayload.toLowerCase() !== 'default') {
                 const rigorousHexEvaluatorFormat = /^#?([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
                 if (!rigorousHexEvaluatorFormat.test(normalizedRawPayload)) {
-                    return message.reply('❌ **Hex Compiler Integrity Failure:** The system could not map your formatting choice into an functional render matrix. Verify it looks clean like `#aabbcc` or `ff0022`. Re-enter color or type `default`:');
+                    const retryEmbed4 = new EmbedBuilder()
+                        .setColor('#e74c3c')
+                        .setTitle('❌ Hex Compiler Integrity Failure')
+                        .setDescription('The system could not map your formatting choice into an functional render matrix. Verify it looks clean like `#aabbcc` or `ff0022`. Re-enter color or type `default`:');
+                    return await mainWizardMessage.edit({ embeds: [retryEmbed4] }).catch(() => null);
                 }
                 dynamicSessionState.data.customColor = normalizedRawPayload.startsWith('#') ? normalizedRawPayload : `#${normalizedRawPayload}`;
             } else {
@@ -442,10 +474,9 @@ client.on('messageCreate', async (message) => {
                     .setColor('#e74c3c')
                     .setTitle('💎 Step 5: [Diamond-Exclusive Benefit] Vector Thumbnail Integration')
                     .setDescription('You possess active permissions to interface rich graphic layouts directly into the framework canvas.\n\nPlease drop a clean network path pointing directly to an online image file asset (must conclude with extensions like `.png`, `.jpg`, `.jpeg`, or `.gif`), or submit `none` to leave layout components dark.');
-                return message.reply({ embeds: [transitionEmbed5] });
+                return await mainWizardMessage.edit({ embeds: [transitionEmbed5] }).catch(() => null);
             } else {
-                // Route Golden Tier to finish line
-                return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+                return buildAndDispatchLessonManifest(mainWizardMessage, dynamicSessionState, userId);
             }
         }
 
@@ -456,21 +487,25 @@ client.on('messageCreate', async (message) => {
             if (normalizedRawPayload.toLowerCase() !== 'none') {
                 const rigidGraphicExtensionFilter = /\.(jpeg|jpg|gif|png)$/i;
                 if (!rigidGraphicExtensionFilter.test(normalizedRawPayload) && !normalizedRawPayload.startsWith('http')) {
-                    return message.reply('❌ **Graphic Resource Interception:** The payload string failed validation checks. Ensure the link points directly to an image ending in an extension like `.png` or `.jpg`, or submit `none`:');
+                    const retryEmbed5 = new EmbedBuilder()
+                        .setColor('#e74c3c')
+                        .setTitle('❌ Graphic Resource Interception')
+                        .setDescription('The payload string failed validation checks. Ensure the link points directly to an image ending in an extension like `.png` or `.jpg`, or submit `none`:');
+                    return await mainWizardMessage.edit({ embeds: [retryEmbed5] }).catch(() => null);
                 }
                 dynamicSessionState.data.mediaAssetUrl = normalizedRawPayload;
             } else {
                 dynamicSessionState.data.mediaAssetUrl = null;
             }
 
-            return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+            return buildAndDispatchLessonManifest(mainWizardMessage, dynamicSessionState, userId);
         }
 
     } catch (unhandledPipelineError) {
         logger.error(`Critical state system exception recorded for user block: ${userId}`, unhandledPipelineError);
         activeWizards.delete(userId);
         metricsEngine.wizardsFailed++;
-        return message.reply('❌ **Pipeline Execution Engine Interrupted:** A catastrophic execution exception broke your setup stream. The local heap file tracker has been dumped to preserve structural stability. Please issue `!lesson` inside the server again.');
+        return message.channel.send('❌ **Pipeline Execution Engine Interrupted:** A catastrophic execution exception broke your setup stream. The local heap file tracker has been dumped to preserve structural stability. Please issue `!lesson` inside the server again.');
     }
 });
 
@@ -480,17 +515,15 @@ client.on('messageCreate', async (message) => {
 /**
  * Programmatic assembler aggregating step answers and shipping layout instances back to originating channels
  */
-async function buildAndDispatchLessonManifest(dmChannelObject, finalSessionState, uniqueUserId) {
+async function buildAndDispatchLessonManifest(targetWizardMsgInstance, finalSessionState, uniqueUserId) {
     try {
         logger.info(`Compiling programmatic class embed model. Mapping trajectory back onto room asset id: ${finalSessionState.targetChannelId}`);
 
-        // Fetch dynamic structural context from cache clusters
         const deliveryTargetChannelInstance = await client.channels.fetch(finalSessionState.targetChannelId);
         if (!deliveryTargetChannelInstance) {
             throw new Error('Destination channel location could not be verified by the core node cache.');
         }
 
-        // Instantiate structural final production build container frame
         const finalExportEmbedTemplate = new EmbedBuilder()
             .setTitle(`📚 Curriculum Deployment: ${finalSessionState.data.title}`)
             .setDescription(finalSessionState.data.outline)
@@ -502,7 +535,6 @@ async function buildAndDispatchLessonManifest(dmChannelObject, finalSessionState
                 inline: false 
             });
 
-        // Conditionally injection arrays for material links
         if (finalSessionState.data.linkUrl) {
             finalExportEmbedTemplate.addFields({ 
                 name: '🔗 Verified Study Materials & Code', 
@@ -511,16 +543,13 @@ async function buildAndDispatchLessonManifest(dmChannelObject, finalSessionState
             });
         }
 
-        // Apply visual vector layers
         if (finalSessionState.data.mediaAssetUrl) {
             finalExportEmbedTemplate.setThumbnail(finalSessionState.data.mediaAssetUrl);
         }
 
-        // Evaluate and implement unique output pings and labels determined by ranks
+        // Send output configurations to the public target server channel
         if (finalSessionState.tier === 'Diamond') {
             finalExportEmbedTemplate.setFooter({ text: '⚡ Diamond Executive Architecture Block • StudioLearny Academic Cluster' });
-            
-            // Execute global message dispatch alongside payload embed structures
             await deliveryTargetChannelInstance.send({
                 content: '🔔 @everyone **An Elite Diamond Class Has Launched!** Review the technical specifications posted below.',
                 embeds: [finalExportEmbedTemplate]
@@ -537,19 +566,25 @@ async function buildAndDispatchLessonManifest(dmChannelObject, finalSessionState
         activeWizards.delete(uniqueUserId);
         metricsEngine.wizardsCompleted++;
 
+        // 🧼 OVERWRITE PANEL FOR CLEAN DM RECEIPT
         const deploymentConfirmationReceiptEmbed = new EmbedBuilder()
             .setColor('#2ecc71')
             .setTitle('🚀 Frame Transmission Successful')
-            .setDescription('✅ **Compilation Matrix Confirmed.** Your customized curriculum blueprint package has been securely written into your server classroom environment.');
+            .setDescription('✅ **Compilation Matrix Confirmed.** Your customized curriculum blueprint package has been securely written into your server classroom environment.\n\n*This interaction terminal is now closed.*');
 
-        return dmChannelObject.reply({ embeds: [deploymentConfirmationReceiptEmbed] });
+        return await targetWizardMsgInstance.edit({ embeds: [deploymentConfirmationReceiptEmbed] }).catch(() => null);
 
     } catch (engineCompilationFailure) {
         logger.error(`Critical Failure occurred at output generation phase for node profile: ${uniqueUserId}`, engineCompilationFailure);
         activeWizards.delete(uniqueUserId);
         metricsEngine.wizardsFailed++;
         
-        return dmChannelObject.reply('❌ **Global Output Deployment Error Encountered:** The application engine failed to post your finalized components into the target channel. Double-check that the bot retains "Send Messages" and "Embed Links" authorization clearances within that classroom space.');
+        const errorEmbed = new EmbedBuilder()
+            .setColor('#e74c3c')
+            .setTitle('❌ Global Output Deployment Error')
+            .setDescription('The application engine failed to post your finalized components into the target channel. Double-check that the bot retains "Send Messages" and "Embed Links" permissions inside that server space.');
+        
+        return await targetWizardMsgInstance.edit({ embeds: [errorEmbed] }).catch(() => null);
     }
 }
 
@@ -560,7 +595,6 @@ const deploymentNetworkInterfaceServer = http.createServer((request, response) =
     logger.debug(`Keep-alive tracking interface hit recorded: ${request.method} ${request.url}`);
     response.writeHead(200, { 'Content-Type': 'application/json' });
     
-    // Provide diagnostic payloads to monitor node setups externally
     response.end(JSON.stringify({
         status: 'ONLINE',
         nodeEngine: 'StudioLearny_Bot_JS_v3',
@@ -570,10 +604,8 @@ const deploymentNetworkInterfaceServer = http.createServer((request, response) =
     }));
 });
 
-// Bind network pipeline interface directly across internal framework standard port 8080
 deploymentNetworkInterfaceServer.listen(8080, () => {
     logger.info('📡 Keep-Alive Network Health Monitor interface bound securely across port 8080');
 });
 
-// Boot operations using process environment profile tokens securely injected via host infrastructure
 client.login(process.env.DISCORD_TOKEN);
