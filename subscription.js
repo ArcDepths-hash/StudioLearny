@@ -2,8 +2,8 @@
  * ============================================================================
  * @file subscription.js
  * @description StudioLearny Ticket-Based Subscription Engine
- * [Features: !setup, !give coins, !balance/!bal, Access Role Injection, Log Revocation]
- * @version 3.3.0
+ * [Features: !setup, !give coins, !balance/!bal (Self & Target), Access Role Injection, Log Revocation]
+ * @version 3.4.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -110,10 +110,7 @@ client.on('messageCreate', async (message) => {
             return message.reply("❌ You do not have permission to run coin minting transactions.");
         }
 
-        // Split arguments safely handling varying spacing configurations
         const args = message.content.trim().split(/\s+/);
-        // Expecting: args[0]='!give', args[1]='coins', args[2]='@user', args[3]='amount'
-
         const targetUser = message.mentions.users.first();
         const amount = parseInt(args[3]);
 
@@ -122,7 +119,6 @@ client.on('messageCreate', async (message) => {
         }
 
         try {
-            // Commit transaction to disk ledger using the economy engine file layer
             const finalLedgerBalance = economyEngine.updateBalance(targetUser.id, amount);
             return message.channel.send(`🪙 **Transaction Logged:** Successfully deposited **${amount}** coins to ${targetUser}. Current Total: **${finalLedgerBalance}** coins.`);
         } catch (error) {
@@ -131,14 +127,24 @@ client.on('messageCreate', async (message) => {
         }
     }
 
-    // --- 3. THE PUBLIC BALANCE CHECK COMMAND (EVERYONE CAN USE) ---
-    if (normalizedContent === '!balance' || normalizedContent === '!bal') {
+    // --- 3. THE ACCOUNT BALANCE CHECK COMMAND (SELF OR PINGED TARGET) ---
+    if (normalizedContent.startsWith('!balance') || normalizedContent.startsWith('!bal')) {
         try {
-            const userWalletBalance = economyEngine.getBalance(message.author.id);
-            return message.reply(`🪙 Your current account balance is **${userWalletBalance}** coins.`);
+            // Check if another user was pinged in the message
+            const targetUser = message.mentions.users.first();
+            
+            if (targetUser) {
+                // Fetch the targeted user's balance (safely fallback to 0 if null/undefined)
+                const targetWalletBalance = economyEngine.getBalance(targetUser.id) || 0;
+                return message.channel.send(`🪙 ${targetUser}'s current account balance is **${targetWalletBalance}** coins.`);
+            } else {
+                // No user pinged, fallback to looking up the author's balance
+                const userWalletBalance = economyEngine.getBalance(message.author.id) || 0;
+                return message.reply(`🪙 Your current account balance is **${userWalletBalance}** coins.`);
+            }
         } catch (error) {
             console.error("Economy read failure on balance check:", error);
-            return message.reply("❌ Unable to retrieve your balance right now.");
+            return message.reply("❌ Unable to retrieve balance data right now.");
         }
     }
 });
