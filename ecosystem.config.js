@@ -20,6 +20,13 @@ module.exports = {
       env: {
         NODE_ENV: 'production'
       }
+    },
+    {
+      name: 'economy-engine',
+      script: 'economy.js',
+      env: {
+        NODE_ENV: 'production'
+      }
     }
   ]
 };
