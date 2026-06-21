@@ -8,8 +8,8 @@ module.exports = {
       }
     },
     {
-      name: 'faq-bot',
-      script: 'faq.js',
+      name: 'apply-bot',
+      script: 'apply.js',
       env: {
         NODE_ENV: 'production'
       }
