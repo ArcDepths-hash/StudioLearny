@@ -2,8 +2,8 @@
  * ============================================================================
  * @file subscription.js
  * @description StudioLearny Ticket-Based Subscription Engine
- * [Features: !setup command, !give coins admin utility, Access Role Injection, Live Log Revocation Controls]
- * @version 3.2.0
+ * [Features: !setup, !give coins, !balance/!bal, Access Role Injection, Log Revocation]
+ * @version 3.3.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -41,7 +41,7 @@ const OWNER_ID = '1511377539073966353';
 
 const dataPath = path.join(__dirname, 'subscription_data.json');
 
-// Updated to use your precise Access Role IDs
+// Subscription Tier Configuration mappings
 const SUBSCRIPTION_PLANS = {
     basic: { name: "Basic Faculty Pass", cost: 0, durationDays: 30, roleId: "1518225938112843937" },
     gold: { name: "Golden Masterclass Pass", cost: 1500, durationDays: 30, roleId: "1518225966688764045" },
@@ -69,14 +69,14 @@ client.once('ready', (instance) => {
 });
 
 // ============================================================================
-// TEXT TRIGGERS: !setup & !give coins (OWNER LOCKED)
+// TEXT TRIGGERS: !setup, !give coins, & !balance / !bal
 // ============================================================================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
     const normalizedContent = message.content.toLowerCase().trim();
 
-    // --- 1. THE SHOP DEPLOYMENT COMMAND ---
+    // --- 1. THE SHOP DEPLOYMENT COMMAND (OWNER LOCKED) ---
     if (normalizedContent === '!setup') {
         if (message.author.id !== OWNER_ID) return;
         await message.delete().catch(() => null);
@@ -104,7 +104,7 @@ client.on('messageCreate', async (message) => {
         await targetChannel.send({ embeds: [storeEmbed], components: [row] });
     }
 
-    // --- 2. THE MINT/GIVE COINS UTILITY ---
+    // --- 2. THE MINT/GIVE COINS UTILITY (OWNER LOCKED) ---
     if (normalizedContent.startsWith('!give coins')) {
         if (message.author.id !== OWNER_ID) {
             return message.reply("❌ You do not have permission to run coin minting transactions.");
@@ -124,11 +124,21 @@ client.on('messageCreate', async (message) => {
         try {
             // Commit transaction to disk ledger using the economy engine file layer
             const finalLedgerBalance = economyEngine.updateBalance(targetUser.id, amount);
-
             return message.channel.send(`🪙 **Transaction Logged:** Successfully deposited **${amount}** coins to ${targetUser}. Current Total: **${finalLedgerBalance}** coins.`);
         } catch (error) {
             console.error("Economy file update failed:", error);
             return message.reply("❌ Structural error encountered updating your ledger data file.");
+        }
+    }
+
+    // --- 3. THE PUBLIC BALANCE CHECK COMMAND (EVERYONE CAN USE) ---
+    if (normalizedContent === '!balance' || normalizedContent === '!bal') {
+        try {
+            const userWalletBalance = economyEngine.getBalance(message.author.id);
+            return message.reply(`🪙 Your current account balance is **${userWalletBalance}** coins.`);
+        } catch (error) {
+            console.error("Economy read failure on balance check:", error);
+            return message.reply("❌ Unable to retrieve your balance right now.");
         }
     }
 });
@@ -304,6 +314,7 @@ async function runSubscriptionExpiryCheck() {
     }
 }
 
+// Lightweight HTTP port allocation map for modern providers
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
     res.end('Subscription System Online\n');
