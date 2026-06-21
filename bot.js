@@ -1,336 +1,579 @@
-// ==================== CONFIGURATION ====================
-const OWNER_ID = '1511377539073966353'; // Verified Owner ID
-
-// Verified Teacher Role IDs
-const BASIC_TEACHER_ROLE_ID   = '1518179501056458792';
-const GOLDEN_TEACHER_ROLE_ID  = '1518179528545931463';
-const DIAMOND_TEACHER_ROLE_ID = '1518179554563194910';
-// =======================================================
+/**
+ * ============================================================================
+ * @file bot.js
+ * @description Advanced StudioLearny Lesson Dispatch & Infrastructure Bot
+ * @version 3.0.0
+ * @framework discord.js (v14+)
+ * ============================================================================
+ */
 
 const { 
     Client, 
     GatewayIntentBits, 
-    ActivityType, 
-    ActionRowBuilder,
-    ButtonBuilder,
-    ButtonStyle,
-    ModalBuilder,
-    TextInputBuilder,
-    TextInputStyle,
-    EmbedBuilder
+    ActionRowBuilder, 
+    ButtonBuilder, 
+    ButtonStyle, 
+    EmbedBuilder, 
+    ChannelType,
+    ActivityType,
+    PermissionFlagsBits
 } = require('discord.js');
 const http = require('http');
 
+// Initialize the Gateway Client Instance with full structural intent scopes
 const client = new Client({
     intents: [
         GatewayIntentBits.Guilds,
         GatewayIntentBits.GuildMessages,
         GatewayIntentBits.MessageContent,
-        GatewayIntentBits.GuildPresences
+        GatewayIntentBits.GuildMembers,
+        GatewayIntentBits.DirectMessages
     ]
 });
 
-client.once('ready', (c) => {
-    console.log(`Bot is online! Logged in as ${c.user.tag}`);
+// ============================================================================
+// 1. SYSTEM CONFIGURATION & COMPONENT STATES
+// ============================================================================
+const OWNER_ID = '1511377539073966353'; // Verified Owner ID
+
+const ROLES = {
+    Basic: '1518179501056458792',
+    Golden: '1518179528545931463',
+    Diamond: '1518179554563194910'
+};
+
+// Internal Volatile State Machines stored across localized RAM allocations
+const activeWizards = new Map();
+const metricsEngine = {
+    commandsExecuted: 0,
+    wizardsStarted: 0,
+    wizardsCompleted: 0,
+    wizardsFailed: 0,
+    bootTime: new Date()
+};
+
+/**
+ * Internal Logging Facility providing highly structured terminal feedback
+ */
+const logger = {
+    info: (msg) => console.log(`[INFO]  | ${new Date().toISOString()} | ${msg}`),
+    warn: (msg) => console.warn(`[WARN]  | ${new Date().toISOString()} | ${msg}`),
+    error: (msg, err) => console.error(`[ERROR] | ${new Date().toISOString()} | ${msg}`, err || ''),
+    debug: (msg) => console.log(`[DEBUG] | ${new Date().toISOString()} | ${msg}`)
+};
+
+// ============================================================================
+// 2. LIFECYCLE INITIALIZATION ENTRYPOINT
+// ============================================================================
+client.once('ready', async (instance) => {
+    logger.info('============================================================================');
+    logger.info(`🤖 SYSTEM INITIALIZED: ${instance.user.tag} IS ONLINE`);
+    logger.info(`👑 Master Cluster Administrator Node ID:  ${OWNER_ID}`);
+    logger.info(`🟢 Bracket Alpha (Basic):                ${ROLES.Basic}`);
+    logger.info(`🟡 Bracket Beta (Golden):                ${ROLES.Golden}`);
+    logger.info(`🔴 Bracket Delta (Diamond):               ${ROLES.Diamond}`);
+    logger.info('============================================================================');
+
+    // Establish production target presence values
     client.user.setPresence({
         status: 'online',
-        activities: [{ name: `StudioLearny Lessons`, type: ActivityType.Listening }]
+        activities: [{ 
+            name: 'StudioLearny Classrooms', 
+            type: ActivityType.Competing 
+        }]
     });
 });
 
-client.on('messageCreate', (message) => {
-    if (!message.guild || message.author.bot) return;
+// ============================================================================
+// 3. INTERNAL DATA CLEANUP SWEEPER INTERVALS
+// ============================================================================
+// Scans wizard profiles every 60 seconds to prune abandoned dead session files
+setInterval(() => {
+    const expirationThreshold = 15 * 60 * 1000; // 15 Minute absolute maximum window
+    const dynamicNow = Date.now();
+    let sweepCount = 0;
 
-    const msgLower = message.content.toLowerCase().trim();
-    const isOwner = message.author.id === OWNER_ID;
+    for (const [userId, record] of activeWizards.entries()) {
+        if (dynamicNow - record.startedAt > expirationThreshold) {
+            activeWizards.delete(userId);
+            sweepCount++;
+            metricsEngine.wizardsFailed++;
+            
+            // Attempt to silently notify the user via DM that their timeout collapsed
+            client.users.fetch(userId).then(async (user) => {
+                await user.send('⚠️ **Session Expired:** Your lesson draft was discarded due to 15 minutes of user inactivity. Please start over.').catch(() => null);
+            }).catch(() => null);
+        }
+    }
+
+    if (sweepCount > 0) {
+        logger.info(`[Garbage Collector] Automatically swept ${sweepCount} lingering wizard profiles from RAM allocation layout.`);
+    }
+}, 60000);
+
+// ============================================================================
+// 4. MAIN CHAT COMMAND ROUTING MATRIX
+// ============================================================================
+client.on('messageCreate', async (message) => {
+    // Structural Guard Filters
+    if (message.author.bot) return;
     
-    // Cache check for all roles
-    const hasBasic = message.member.roles.cache.has(BASIC_TEACHER_ROLE_ID);
-    const hasGold = message.member.roles.cache.has(GOLDEN_TEACHER_ROLE_ID);
-    const hasDiamond = message.member.roles.cache.has(DIAMOND_TEACHER_ROLE_ID);
-    const isAnyTeacher = isOwner || hasBasic || hasGold || hasDiamond;
+    const tokenizedArgs = message.content.split(/\s+/);
+    const primarySignature = tokenizedArgs[0].toLowerCase();
 
-    // --- DISPLAY AUTHORIZED ROLES & RANKS ---
-    if (msgLower === '!authorized' || msgLower === '!authorised') {
-        const listEmbed = new EmbedBuilder()
-            .setColor('#1a1a1a')
-            .setTitle('🛡️ StudioLearny Staff Access & Hierarchy')
-            .setDescription('Here is the official staff lineup and the specific rank permissions assigned to each role:')
-            .addFields(
-                { name: '👑 Bot Owner', value: `<@${OWNER_ID}> (Full Developer Access)`, inline: false },
-                { name: '🥇 Diamond Tier', value: `<@&${DIAMOND_TEACHER_ROLE_ID}>\n*Perks: Custom Titles, Content, and Hex Colors*`, inline: false },
-                { name: '🥈 Golden Tier', value: `<@&${GOLDEN_TEACHER_ROLE_ID}>\n*Perks: Custom Titles and Content*`, inline: false },
-                { name: '🥉 Basic Tier', value: `<@&${BASIC_TEACHER_ROLE_ID}>\n*Perks: Standard Template Lessons*`, inline: false }
-            )
+    // ------------------------------------------------------------------------
+    // COMMAND: !authorized [SYSTEM CORE ANALYTICS]
+    // ------------------------------------------------------------------------
+    if (primarySignature === '!authorized') {
+        metricsEngine.commandsExecuted++;
+        logger.debug(`Evaluating authorization parameters for Node Request: ${message.author.id}`);
+
+        const baseReportEmbed = new EmbedBuilder()
+            .setTitle('🖥️ StudioLearny Authorization Framework Diagnostics')
             .setTimestamp()
-            .setFooter({ text: 'StudioLearny Management System' });
+            .setFooter({ text: 'Engine Version: 3.0.0-Prod • Core Architecture Active' });
 
-        return message.reply({ embeds: [listEmbed] });
-    }
+        // Evaluator Block A: Root Administrator Checks
+        if (message.author.id === OWNER_ID) {
+            const upTimeMs = Date.now() - metricsEngine.bootTime.getTime();
+            const days = Math.floor(upTimeMs / (24 * 60 * 60 * 1000));
+            const hours = Math.floor((upTimeMs % (24 * 60 * 60 * 1000)) / (60 * 60 * 1000));
+            const minutes = Math.floor((upTimeMs % (60 * 60 * 1000)) / (60 * 1000));
 
-    // =======================================================
-    // MAIN MASTER LESSON COMMAND (WITH TIER SELECTION BUTTONS)
-    // =======================================================
-    if (msgLower === '!lesson') {
-        if (!isAnyTeacher) {
-            return message.reply('❌ You are not an authorized teacher! You cannot use this command.');
+            baseReportEmbed.setColor('#7289da')
+                .setDescription('👑 **Master Root Access Matrix Verified.**\nYou possess global override bypass authorization privileges across this deployment cluster.')
+                .addFields(
+                    { name: '📡 Cluster Status', value: '🟢 Active / Normal Execution', inline: true },
+                    { name: '⏱️ Core Node Uptime', value: `\`${days}d ${hours}h ${minutes}m\``, inline: true },
+                    { name: '💾 Active RAM Sessions', value: `\`${activeWizards.size}\` Wizard Instances`, inline: true },
+                    { name: '📊 Routed Core Commands', value: `\`${metricsEngine.commandsExecuted}\` Calls`, inline: true },
+                    { name: '📈 Total Setup Successes', value: `\`${metricsEngine.wizardsCompleted}\` Iterations`, inline: true },
+                    { name: '📉 Total Aborts/Timeouts', value: `\`${metricsEngine.wizardsFailed}\` Failures`, inline: true }
+                );
+            return message.reply({ embeds: [baseReportEmbed] });
         }
 
-        const menuRow = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('menu_basic').setLabel('Basic Teacher').setStyle(ButtonStyle.Primary),
-            new ButtonBuilder().setCustomId('menu_gold').setLabel('Golden Teacher').setStyle(ButtonStyle.Success),
-            new ButtonBuilder().setCustomId('menu_diamond').setLabel('Diamond Teacher').setStyle(ButtonStyle.Secondary),
-            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger)
-        );
-
-        return message.reply({
-            content: '👋 **StudioLearny Lesson Portal**\nWhich teaching tier setup would you like to open today?',
-            components: [menuRow]
-        });
-    }
-
-    // =======================================================
-    // SHORTCUT 1: BASIC LESSON COMMAND
-    // =======================================================
-    if (msgLower === '!basic lesson') {
-        if (!isAnyTeacher) {
-            return message.reply('❌ You must be at least a Basic Teacher to use this command.');
+        // Evaluator Block B: Multi-tiered Staff Context Resolvers
+        if (!message.guild) {
+            baseReportEmbed.setColor('#e74c3c')
+                .setDescription('❌ **Context Execution Error:** Staff role evaluations require an active Guild context channel environment.');
+            return message.reply({ embeds: [baseReportEmbed] });
         }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('start_basic_lesson').setLabel('Write Basic Lesson').setStyle(ButtonStyle.Primary)
-        );
+        const staffMember = message.member;
+        if (!staffMember) return;
 
-        return message.reply({
-            content: '🥉 **Basic Lesson Setup Shortcut**\nReady to post a standard text lesson?',
-            components: [row]
-        });
-    }
+        let dynamicRankIndicator = '🚫 Standard Classroom Visitor (No Elevation Access)';
+        let tierColorCode = '#95a5a6';
 
-    // =======================================================
-    // SHORTCUT 2: GOLD LESSON COMMAND
-    // =======================================================
-    if (msgLower === '!gold lesson') {
-        if (!isOwner && !hasGold && !hasDiamond) {
-            return message.reply('❌ You must be at least a Golden Teacher to use this command.');
+        if (staffMember.roles.cache.has(ROLES.Diamond)) {
+            dynamicRankIndicator = '💎 Premium Diamond Faculty Level';
+            tierColorCode = '#3498db';
+        } else if (staffMember.roles.cache.has(ROLES.Golden)) {
+            dynamicRankIndicator = '⭐ Elevated Golden Teaching Staff';
+            tierColorCode = '#f1c40f';
+        } else if (staffMember.roles.cache.has(ROLES.Basic)) {
+            dynamicRankIndicator = '📖 Standard Syllabus Instructor';
+            tierColorCode = '#2ecc71';
         }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('start_gold_lesson').setLabel('Write Gold Lesson').setStyle(ButtonStyle.Success)
-        );
+        baseReportEmbed.setColor(tierColorCode)
+            .setDescription(`📋 **User Credential Manifest Ledger:**\n\n**Account Identifier:** \`${message.author.id}\`\n**Verified Tier Rank:** **${dynamicRankIndicator}**`)
+            .addFields({ 
+                name: '🔧 Permissions Status', 
+                value: staffMember.permissions.has(PermissionFlagsBits.Administrator) ? '✅ Server Admin Privileges Present' : 'ℹ️ Standard Faculty Restrictions Applied'
+            });
 
-        return message.reply({
-            content: '🥈 **Gold Lesson Setup Shortcut**\nReady to post a lesson with custom titles?',
-            components: [row]
-        });
+        return message.reply({ embeds: [baseReportEmbed] });
     }
 
-    // =======================================================
-    // SHORTCUT 3: DIAMOND LESSON COMMAND
-    // =======================================================
-    if (msgLower === '!diamond lesson') {
-        if (!isOwner && !hasDiamond) {
-            return message.reply('❌ You must be a Diamond Teacher to use this command.');
+    // ------------------------------------------------------------------------
+    // COMMAND: !lesson [LESSON BUILDER PIPELINE BOOTLOADER]
+    // ------------------------------------------------------------------------
+    if (primarySignature === '!lesson') {
+        metricsEngine.commandsExecuted++;
+        
+        if (!message.guild) {
+            return message.reply('❌ **Context Failure:** Lesson generation deployment components can only be instantiated within a valid server text channel.');
         }
 
-        const row = new ActionRowBuilder().addComponents(
-            new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-            new ButtonBuilder().setCustomId('start_diamond_lesson').setLabel('Write Diamond Lesson').setStyle(ButtonStyle.Secondary)
-        );
+        const contextualMember = message.member;
+        if (!contextualMember) return;
+
+        // Perform dynamic structural role token audits prior to displaying buttons
+        const userHasBasic = contextualMember.roles.cache.has(ROLES.Basic);
+        const userHasGolden = contextualMember.roles.cache.has(ROLES.Golden);
+        const userHasDiamond = contextualMember.roles.cache.has(ROLES.Diamond);
+        const isMasterOverride = (message.author.id === OWNER_ID);
+
+        if (!userHasBasic && !userHasGolden && !userHasDiamond && !isMasterOverride) {
+            return message.reply('❌ **Security Boundary Warning:** Your current user security certificate doesn\'t contain any valid Instructor Roles.');
+        }
+
+        logger.info(`Instantiating UI layout sequence inside channel ${message.channelId} for candidate: ${message.author.id}`);
+
+        // Construct high-grade Component rows using programmatic validation configurations
+        const interactiveActionRow = new ActionRowBuilder()
+            .addComponents(
+                new ButtonBuilder()
+                    .setCustomId('tier_basic')
+                    .setLabel('Basic Blueprint')
+                    .setStyle(ButtonStyle.Primary)
+                    .setDisabled(!userHasBasic && !isMasterOverride && !userHasDiamond && !userHasGolden),
+                new ButtonBuilder()
+                    .setCustomId('tier_golden')
+                    .setLabel('Golden Blueprint')
+                    .setStyle(ButtonStyle.Success)
+                    .setDisabled(!userHasGolden && !isMasterOverride && !userHasDiamond),
+                new ButtonBuilder()
+                    .setCustomId('tier_diamond')
+                    .setLabel('Diamond Masterclass')
+                    .setStyle(ButtonStyle.Danger)
+                    .setDisabled(!userHasDiamond && !isMasterOverride)
+            );
+
+        const corePanelEmbed = new EmbedBuilder()
+            .setTitle('🎓 StudioLearny Automated Content Engine')
+            .setDescription('Welcome to the centralized content orchestration dashboard. Please select your target tier profile infrastructure below to initialize your conversational setup sequence.')
+            .setColor('#5865f2')
+            .addFields(
+                { name: '📘 Basic Layer', value: 'Includes Title, Content Outlines, and Core Documentation Links.', inline: true },
+                { name: '⭐ Golden Layer', value: 'Adds custom branding frame capabilities and accent coloring overrides.', inline: true },
+                { name: '💎 Diamond Masterclass', value: 'Full asset integration, media thumbnails, and automated global broadcast alerts.', inline: true }
+            )
+            .setFooter({ text: 'Ensure your private Direct Messages are completely open prior to selecting an option!' });
 
         return message.reply({
-            content: '🥇 **Diamond Lesson Setup Shortcut**\nFull access: Custom titles, descriptions, and hex colors enabled.',
-            components: [row]
+            embeds: [corePanelEmbed],
+            components: [interactiveActionRow]
         });
     }
 });
 
-// Handling Button clicks and Form submissions
+// ============================================================================
+// 5. INTERACTION SUB-ROUTINE HANDLER (BUTTON ACCESS POINT)
+// ============================================================================
 client.on('interactionCreate', async (interaction) => {
-    if (interaction.isButton()) {
-        const isOwner = interaction.user.id === OWNER_ID;
-        const hasBasic = interaction.member.roles.cache.has(BASIC_TEACHER_ROLE_ID);
-        const hasGold = interaction.member.roles.cache.has(GOLDEN_TEACHER_ROLE_ID);
-        const hasDiamond = interaction.member.roles.cache.has(DIAMOND_TEACHER_ROLE_ID);
+    if (!interaction.isButton()) return;
 
-        // Security check: Only allow the person who sent the command to interact
-        if (interaction.message.reference) {
-            const originalMsg = await interaction.channel.messages.fetch(interaction.message.reference.messageId).catch(() => null);
-            if (originalMsg && interaction.user.id !== originalMsg.author.id) {
-                return interaction.reply({ content: '❌ Only the teacher who initiated this command can use these buttons.', ephemeral: true });
-            }
-        }
+    logger.debug(`Processing Button Component Node hit: ${interaction.customId} from executor: ${interaction.user.id}`);
 
-        if (interaction.customId === 'lesson_mistake') {
-            return interaction.update({ content: '❌ Action cancelled.', components: [] });
-        }
+    const systemTierIdentifiers = {
+        'tier_basic': 'Basic',
+        'tier_golden': 'Golden',
+        'tier_diamond': 'Diamond'
+    };
 
-        // --- MASTER MENU DIRECTION + ROLE CHECKS ---
-        if (interaction.customId === 'menu_basic') {
-            if (!isOwner && !hasBasic && !hasGold && !hasDiamond) {
-                return interaction.reply({ content: '❌ Access Denied: You do not have the Basic Teacher role!', ephemeral: true });
-            }
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('start_basic_lesson').setLabel('Confirm & Write Basic Lesson').setStyle(ButtonStyle.Primary)
-            );
-            return interaction.update({ content: '🥉 **Basic Lesson Mode Activated.** Ready?', components: [row] });
-        }
+    const evaluatedTargetTier = systemTierIdentifiers[interaction.customId];
+    if (!evaluatedTargetTier) return; // Unrecognized internal execution path
 
-        if (interaction.customId === 'menu_gold') {
-            if (!isOwner && !hasGold && !hasDiamond) {
-                return interaction.reply({ content: '❌ Access Denied: You do not have the Golden Teacher role!', ephemeral: true });
-            }
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('start_gold_lesson').setLabel('Confirm & Write Gold Lesson').setStyle(ButtonStyle.Success)
-            );
-            return interaction.update({ content: '🥈 **Gold Lesson Mode Activated.** Ready?', components: [row] });
-        }
+    const userId = interaction.user.id;
+    const requiredCryptographicRole = ROLES[evaluatedTargetTier];
+    const originalTargetGuild = interaction.guild;
 
-        if (interaction.customId === 'menu_diamond') {
-            if (!isOwner && !hasDiamond) {
-                return interaction.reply({ content: '❌ Access Denied: You do not have the Diamond Teacher role!', ephemeral: true });
-            }
-            const row = new ActionRowBuilder().addComponents(
-                new ButtonBuilder().setCustomId('lesson_mistake').setLabel('Cancel').setStyle(ButtonStyle.Danger),
-                new ButtonBuilder().setCustomId('start_diamond_lesson').setLabel('Confirm & Write Diamond Lesson').setStyle(ButtonStyle.Secondary)
-            );
-            return interaction.update({ content: '🥇 **Diamond Lesson Mode Activated.** Ready?', components: [row] });
-        }
+    if (!originalTargetGuild) return;
 
-        // --- TRIGGER BASIC MODAL (1 Field) ---
-        if (interaction.customId === 'start_basic_lesson') {
-            const modal = new ModalBuilder().setCustomId('modal_basic').setTitle('Create Basic Lesson');
-            const input = new TextInputBuilder()
-                .setCustomId('basic_content')
-                .setLabel('Lesson Content:')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-            
-            modal.addComponents(new ActionRowBuilder().addComponents(input));
-            await interaction.showModal(modal);
-            return interaction.message.delete().catch(() => null);
-        }
-
-        // --- TRIGGER GOLD MODAL (2 Fields) ---
-        if (interaction.customId === 'start_gold_lesson') {
-            const modal = new ModalBuilder().setCustomId('modal_gold').setTitle('Create Golden Lesson');
-            
-            const titleInput = new TextInputBuilder()
-                .setCustomId('gold_title')
-                .setLabel('Custom Embed Title:')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const contentInput = new TextInputBuilder()
-                .setCustomId('gold_content')
-                .setLabel('Lesson Content:')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-            
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(titleInput),
-                new ActionRowBuilder().addComponents(contentInput)
-            );
-            await interaction.showModal(modal);
-            return interaction.message.delete().catch(() => null);
-        }
-
-        // --- TRIGGER DIAMOND MODAL (3 Fields) ---
-        if (interaction.customId === 'start_diamond_lesson') {
-            const modal = new ModalBuilder().setCustomId('modal_diamond').setTitle('Create Diamond Lesson');
-            
-            const titleInput = new TextInputBuilder()
-                .setCustomId('diamond_title')
-                .setLabel('Custom Embed Title:')
-                .setStyle(TextInputStyle.Short)
-                .setRequired(true);
-
-            const contentInput = new TextInputBuilder()
-                .setCustomId('diamond_content')
-                .setLabel('Lesson Content:')
-                .setStyle(TextInputStyle.Paragraph)
-                .setRequired(true);
-
-            const colorInput = new TextInputBuilder()
-                .setCustomId('diamond_color')
-                .setLabel('Embed Hex Color (e.g., #ff0000):')
-                .setStyle(TextInputStyle.Short)
-                .setPlaceholder('#00ffff')
-                .setRequired(false);
-            
-            modal.addComponents(
-                new ActionRowBuilder().addComponents(titleInput),
-                new ActionRowBuilder().addComponents(contentInput),
-                new ActionRowBuilder().addComponents(colorInput)
-            );
-            await interaction.showModal(modal);
-            return interaction.message.delete().catch(() => null);
-        }
+    // Secure operational verification against real-time API states
+    const activeMemberObject = await originalTargetGuild.members.fetch(userId).catch(() => null);
+    if (!activeMemberObject) {
+        return interaction.reply({ content: '❌ **State Resolver Error:** The core could not safely fetch your member profile state across this cluster.', ephemeral: true });
     }
 
-    if (interaction.isModalSubmit()) {
-        // --- SUBMIT BASIC LESSON ---
-        if (interaction.customId === 'modal_basic') {
-            const content = interaction.fields.getTextInputValue('basic_content');
-            const embed = new EmbedBuilder()
-                .setColor('#555555')
-                .setTitle('📚 StudioLearny Standard Lesson')
-                .setDescription(content)
-                .setFooter({ text: `Instructor: ${interaction.user.username} (Basic Tier)` })
-                .setTimestamp();
-            return interaction.reply({ embeds: [embed] });
-        }
+    const isSystemOwnerOverride = (userId === OWNER_ID);
+    const validationSuccess = activeMemberObject.roles.cache.has(requiredCryptographicRole) || isSystemOwnerOverride;
 
-        // --- SUBMIT GOLD LESSON ---
-        if (interaction.customId === 'modal_gold') {
-            const title = interaction.fields.getTextInputValue('gold_title');
-            const content = interaction.fields.getTextInputValue('gold_content');
-            const embed = new EmbedBuilder()
-                .setColor('#d4af37')
-                .setTitle(`🌟 ${title}`)
-                .setDescription(content)
-                .setFooter({ text: `Instructor: ${interaction.user.username} (Gold Tier)` })
-                .setTimestamp();
-            return interaction.reply({ embeds: [embed] });
-        }
+    if (!validationSuccess) {
+        return interaction.reply({
+            content: `❌ **Access Control Failure:** You lack the corresponding structural role badge necessary to claim the **${evaluatedTargetTier} Class Container System**.`,
+            ephemeral: true
+        });
+    }
 
-        // --- SUBMIT DIAMOND LESSON ---
-        if (interaction.customId === 'modal_diamond') {
-            const title = interaction.fields.getTextInputValue('diamond_title');
-            const content = interaction.fields.getTextInputValue('diamond_content');
-            let hexColor = interaction.fields.getTextInputValue('diamond_color') || '#00ffff';
+    metricsEngine.wizardsStarted++;
 
-            if (hexColor && !hexColor.startsWith('#')) {
-                hexColor = `#${hexColor}`;
+    // Purge historical loops to reset heap leaks
+    if (activeWizards.has(userId)) {
+        activeWizards.delete(userId);
+    }
+
+    try {
+        const directCommsPipe = await interaction.user.createDM();
+
+        // Instantiate core transactional structure map inside RAM allocations
+        activeWizards.set(userId, {
+            tier: evaluatedTargetTier,
+            targetChannelId: interaction.channelId,
+            guildId: interaction.guildId,
+            startedAt: Date.now(),
+            step: 1,
+            data: {
+                title: null,
+                outline: null,
+                linkUrl: null,
+                customColor: '#00bfff',
+                mediaAssetUrl: null,
+                durationEstimate: 'Unspecified',
+                facultyAuthorSignature: activeMemberObject.displayName
             }
+        });
 
-            const isValidHex = /^#[0-9A-F]{6}$/i.test(hexColor);
-            const finalColor = isValidHex ? hexColor : '#00ffff';
+        await interaction.reply({
+            content: '📬 **Setup Thread Dispatched.** The deployment automation pipeline has successfully established contact inside your Direct Messages.',
+            ephemeral: true
+        });
 
-            const embed = new EmbedBuilder()
-                .setColor(finalColor)
-                .setTitle(`💎 ${title}`)
-                .setDescription(content)
-                .setFooter({ text: `Instructor: ${interaction.user.username} (Diamond Tier)` })
-                .setTimestamp();
-            return interaction.reply({ embeds: [embed] });
-        }
+        const queryStepOneEmbed = new EmbedBuilder()
+            .setTitle(`🎬 Curriculum Wizard Deployment Panel • [${evaluatedTargetTier.toUpperCase()} MODE]`)
+            .setDescription(`Greetings ${activeMemberObject.displayName},\nLet\'s build your learning layout frame step by step.`)
+            .addFields({ 
+                name: '📝 STEP 1: Primary Core Header Title', 
+                value: 'Please reply directly to this message with your intended lesson **Headline Title**.\n*(Constraint Limits: 3 - 100 character characters total)*' 
+            })
+            .setColor('#2ecc71')
+            .setFooter({ text: 'Warning: This pipeline tracking frame will auto-terminate after 15 minutes of inactivity.' });
+
+        await directCommsPipe.send({ embeds: [queryStepOneEmbed] });
+
+    } catch (concurrencyError) {
+        logger.error(`Failed to lock onto DM channels with target node user: ${userId}`, concurrencyError);
+        metricsEngine.wizardsFailed++;
+        return interaction.reply({
+            content: '❌ **Handshake Transmission Blundered:** The engine failed to open a direct dialogue profile framework with your user. Please navigate to `User Settings -> Privacy & Safety` and check "Allow direct messages from server members".',
+            ephemeral: true
+        });
     }
 });
 
-// Web Server for Railway hosting
-const server = http.createServer((req, res) => {
-    res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('StudioLearny System is fully operational!\n');
+// ============================================================================
+// 6. DM DATA HARVESTER CORE (CONVERSATIONAL STATE PIPELINE)
+// ============================================================================
+client.on('messageCreate', async (message) => {
+    // Structural isolation boundary enforcement
+    if (message.channel.type !== ChannelType.DM || message.author.bot) return;
+
+    const userId = message.author.id;
+    const dynamicSessionState = activeWizards.get(userId);
+
+    // Escape execution sequence loop instantly if no valid configuration map is bound to the worker node
+    if (!dynamicSessionState) return;
+
+    const normalizedRawPayload = message.content.trim();
+
+    try {
+        // --------------------------------------------------------------------
+        // STATE PIPELINE STEP 1: EXTRACT HEADLINE TITLE
+        // --------------------------------------------------------------------
+        if (dynamicSessionState.step === 1) {
+            if (normalizedRawPayload.length < 3 || normalizedRawPayload.length > 100) {
+                return message.reply('⚠️ **Structural Integrity Fault:** Lesson Titles cannot be shorter than 3 characters or extend past 100 characters. Please re-submit a cleaner title variation:');
+            }
+            dynamicSessionState.data.title = normalizedRawPayload;
+            dynamicSessionState.step = 2;
+
+            const transitionEmbed2 = new EmbedBuilder()
+                .setColor('#3498db')
+                .setTitle('📖 Step 2: Comprehensive Lesson Concept Outline')
+                .setDescription('Please write a robust description summary mapping out exactly what metrics and technologies are going to be examined within this academic lesson block.\n\n*(Constraint Limits: 10 - 1000 characters maximum)*');
+            return message.reply({ embeds: [transitionEmbed2] });
+        }
+
+        // --------------------------------------------------------------------
+        // STATE PIPELINE STEP 2: EXTRACT BRIEF OUTLINE DESCRIPTION
+        // --------------------------------------------------------------------
+        if (dynamicSessionState.step === 2) {
+            if (normalizedRawPayload.length < 10 || normalizedRawPayload.length > 1000) {
+                return message.reply(`⚠️ **Structural Integrity Fault:** Your content outline submission must be reasonably descriptive. Your response contained \`${normalizedRawPayload.length}\` characters. Ensure it spans between 10 and 1000 characters:`);
+            }
+            dynamicSessionState.data.outline = normalizedRawPayload;
+            dynamicSessionState.step = 3;
+
+            const transitionEmbed3 = new EmbedBuilder()
+                .setColor('#9b59b6')
+                .setTitle('🔗 Step 3: Material Distribution Hyperlink / URL Asset')
+                .setDescription('Please submit a fully functional external web address linking out to your codebases or notes repositories (e.g., `https://github.com/`).\n\n*If this module does not rely on an external destination platform, reply with `none`.*');
+            return message.reply({ embeds: [transitionEmbed3] });
+        }
+
+        // --------------------------------------------------------------------
+        // STATE PIPELINE STEP 3: EXTRACT EXTERNAL WEB TARGETS
+        // --------------------------------------------------------------------
+        if (dynamicSessionState.step === 3) {
+            if (normalizedRawPayload.toLowerCase() !== 'none') {
+                const standardizedUrlValidatorPattern = /^(https?:\/\/)?([\da-z.-]+)\.([a-z.]{2,6})([\/\w .-]*)*\/?$/i;
+                if (!standardizedUrlValidatorPattern.test(normalizedRawPayload)) {
+                    return message.reply('❌ **Format Compilation Rejection:** The compiler failed to securely parse your input line as a valid network URL trajectory point. Provide a secure path starting with `http://` or `https://`, or submit `none`:');
+                }
+                dynamicSessionState.data.linkUrl = normalizedRawPayload;
+            } else {
+                dynamicSessionState.data.linkUrl = null;
+            }
+
+            // Divergence calculations determined via internal subscription permissions map
+            if (dynamicSessionState.tier === 'Golden' || dynamicSessionState.tier === 'Diamond') {
+                dynamicSessionState.step = 4;
+                const transitionEmbed4 = new EmbedBuilder()
+                    .setColor('#f1c40f')
+                    .setTitle('🎨 Step 4: [Tier-Exclusive Benefit] Hex Sidebar Customization')
+                    .setDescription('As an authenticated VIP tier instructor asset, you hold rights to overwrite global styling modules.\n\nPlease supply a valid Hexadecimal string sequence (e.g., `#ff0055` or `00ffcc`) to brand your frame borders, or type `default`.');
+                return message.reply({ embeds: [transitionEmbed4] });
+            } else {
+                // Route Standard Tier straight to finalize
+                return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+            }
+        }
+
+        // --------------------------------------------------------------------
+        // STATE PIPELINE STEP 4: FRAME ACCENT HEX MATRIX PROCESSING (Golden/Diamond Only)
+        // --------------------------------------------------------------------
+        if (dynamicSessionState.step === 4) {
+            if (normalizedRawPayload.toLowerCase() !== 'default') {
+                const rigorousHexEvaluatorFormat = /^#?([a-fA-F0-9]{6}|[a-fA-F0-9]{3})$/;
+                if (!rigorousHexEvaluatorFormat.test(normalizedRawPayload)) {
+                    return message.reply('❌ **Hex Compiler Integrity Failure:** The system could not map your formatting choice into an functional render matrix. Verify it looks clean like `#aabbcc` or `ff0022`. Re-enter color or type `default`:');
+                }
+                dynamicSessionState.data.customColor = normalizedRawPayload.startsWith('#') ? normalizedRawPayload : `#${normalizedRawPayload}`;
+            } else {
+                dynamicSessionState.data.customColor = dynamicSessionState.tier === 'Golden' ? '#f1c40f' : '#e74c3c';
+            }
+
+            if (dynamicSessionState.tier === 'Diamond') {
+                dynamicSessionState.step = 5;
+                const transitionEmbed5 = new EmbedBuilder()
+                    .setColor('#e74c3c')
+                    .setTitle('💎 Step 5: [Diamond-Exclusive Benefit] Vector Thumbnail Integration')
+                    .setDescription('You possess active permissions to interface rich graphic layouts directly into the framework canvas.\n\nPlease drop a clean network path pointing directly to an online image file asset (must conclude with extensions like `.png`, `.jpg`, `.jpeg`, or `.gif`), or submit `none` to leave layout components dark.');
+                return message.reply({ embeds: [transitionEmbed5] });
+            } else {
+                // Route Golden Tier to finish line
+                return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+            }
+        }
+
+        // --------------------------------------------------------------------
+        // STATE PIPELINE STEP 5: ASSIGN RICH MEDIA GRAPHICAL ELEMENTS (Diamond Only)
+        // --------------------------------------------------------------------
+        if (dynamicSessionState.step === 5) {
+            if (normalizedRawPayload.toLowerCase() !== 'none') {
+                const rigidGraphicExtensionFilter = /\.(jpeg|jpg|gif|png)$/i;
+                if (!rigidGraphicExtensionFilter.test(normalizedRawPayload) && !normalizedRawPayload.startsWith('http')) {
+                    return message.reply('❌ **Graphic Resource Interception:** The payload string failed validation checks. Ensure the link points directly to an image ending in an extension like `.png` or `.jpg`, or submit `none`:');
+                }
+                dynamicSessionState.data.mediaAssetUrl = normalizedRawPayload;
+            } else {
+                dynamicSessionState.data.mediaAssetUrl = null;
+            }
+
+            return buildAndDispatchLessonManifest(message, dynamicSessionState, userId);
+        }
+
+    } catch (unhandledPipelineError) {
+        logger.error(`Critical state system exception recorded for user block: ${userId}`, unhandledPipelineError);
+        activeWizards.delete(userId);
+        metricsEngine.wizardsFailed++;
+        return message.reply('❌ **Pipeline Execution Engine Interrupted:** A catastrophic execution exception broke your setup stream. The local heap file tracker has been dumped to preserve structural stability. Please issue `!lesson` inside the server again.');
+    }
 });
 
-const PORT = process.env.PORT || 8080;
-server.listen(PORT, () => {
-    console.log(`Web server listening on port ${PORT}`);
+// ============================================================================
+// 7. COMPILATION RUNTIME ENGINE & FINAL DISPATCH UNIT
+// ============================================================================
+/**
+ * Programmatic assembler aggregating step answers and shipping layout instances back to originating channels
+ */
+async function buildAndDispatchLessonManifest(dmChannelObject, finalSessionState, uniqueUserId) {
+    try {
+        logger.info(`Compiling programmatic class embed model. Mapping trajectory back onto room asset id: ${finalSessionState.targetChannelId}`);
+
+        // Fetch dynamic structural context from cache clusters
+        const deliveryTargetChannelInstance = await client.channels.fetch(finalSessionState.targetChannelId);
+        if (!deliveryTargetChannelInstance) {
+            throw new Error('Destination channel location could not be verified by the core node cache.');
+        }
+
+        // Instantiate structural final production build container frame
+        const finalExportEmbedTemplate = new EmbedBuilder()
+            .setTitle(`📚 Curriculum Deployment: ${finalSessionState.data.title}`)
+            .setDescription(finalSessionState.data.outline)
+            .setColor(finalSessionState.data.customColor)
+            .setTimestamp()
+            .addFields({ 
+                name: '👨‍🏫 Appointed Faculty Instructor', 
+                value: `\`${finalSessionState.data.facultyAuthorSignature}\` (${finalSessionState.sessionTier || finalSessionState.tier} Unit Structure)`, 
+                inline: false 
+            });
+
+        // Conditionally injection arrays for material links
+        if (finalSessionState.data.linkUrl) {
+            finalExportEmbedTemplate.addFields({ 
+                name: '🔗 Verified Study Materials & Code', 
+                value: `[Access Classroom Resources Here](${finalSessionState.data.linkUrl})`, 
+                inline: false 
+            });
+        }
+
+        // Apply visual vector layers
+        if (finalSessionState.data.mediaAssetUrl) {
+            finalExportEmbedTemplate.setThumbnail(finalSessionState.data.mediaAssetUrl);
+        }
+
+        // Evaluate and implement unique output pings and labels determined by ranks
+        if (finalSessionState.tier === 'Diamond') {
+            finalExportEmbedTemplate.setFooter({ text: '⚡ Diamond Executive Architecture Block • StudioLearny Academic Cluster' });
+            
+            // Execute global message dispatch alongside payload embed structures
+            await deliveryTargetChannelInstance.send({
+                content: '🔔 @everyone **An Elite Diamond Class Has Launched!** Review the technical specifications posted below.',
+                embeds: [finalExportEmbedTemplate]
+            });
+        } else if (finalSessionState.tier === 'Golden') {
+            finalExportEmbedTemplate.setFooter({ text: '⭐ Golden Premium Framework Element • StudioLearny Staff Content' });
+            await deliveryTargetChannelInstance.send({ embeds: [finalExportEmbedTemplate] });
+        } else {
+            finalExportEmbedTemplate.setFooter({ text: '📖 StudioLearny Standard Core Syllabus' });
+            await deliveryTargetChannelInstance.send({ embeds: [finalExportEmbedTemplate] });
+        }
+
+        // Structural clean-up sequence tracking indices inside RAM
+        activeWizards.delete(uniqueUserId);
+        metricsEngine.wizardsCompleted++;
+
+        const deploymentConfirmationReceiptEmbed = new EmbedBuilder()
+            .setColor('#2ecc71')
+            .setTitle('🚀 Frame Transmission Successful')
+            .setDescription('✅ **Compilation Matrix Confirmed.** Your customized curriculum blueprint package has been securely written into your server classroom environment.');
+
+        return dmChannelObject.reply({ embeds: [deploymentConfirmationReceiptEmbed] });
+
+    } catch (engineCompilationFailure) {
+        logger.error(`Critical Failure occurred at output generation phase for node profile: ${uniqueUserId}`, engineCompilationFailure);
+        activeWizards.delete(uniqueUserId);
+        metricsEngine.wizardsFailed++;
+        
+        return dmChannelObject.reply('❌ **Global Output Deployment Error Encountered:** The application engine failed to post your finalized components into the target channel. Double-check that the bot retains "Send Messages" and "Embed Links" authorization clearances within that classroom space.');
+    }
+}
+
+// ============================================================================
+// 8. INFRASTRUCTURE KEEP-ALIVE SERVER PORT HOOK ROUTINES
+// ============================================================================
+const deploymentNetworkInterfaceServer = http.createServer((request, response) => {
+    logger.debug(`Keep-alive tracking interface hit recorded: ${request.method} ${request.url}`);
+    response.writeHead(200, { 'Content-Type': 'application/json' });
+    
+    // Provide diagnostic payloads to monitor node setups externally
+    response.end(JSON.stringify({
+        status: 'ONLINE',
+        nodeEngine: 'StudioLearny_Bot_JS_v3',
+        uptimeSeconds: Math.floor((Date.now() - metricsEngine.bootTime.getTime()) / 1000),
+        activeWizardTracks: activeWizards.size,
+        totalDispatches: metricsEngine.wizardsCompleted
+    }));
 });
 
+// Bind network pipeline interface directly across internal framework standard port 8080
+deploymentNetworkInterfaceServer.listen(8080, () => {
+    logger.info('📡 Keep-Alive Network Health Monitor interface bound securely across port 8080');
+});
+
+// Boot operations using process environment profile tokens securely injected via host infrastructure
 client.login(process.env.DISCORD_TOKEN);
