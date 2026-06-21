@@ -121,8 +121,8 @@ client.on('messageCreate', (message) => {
     }
 
     // --- TRIGGER: Vague Help Question ---
-    const isVagueQuestion = vagueQuestions.some(phrase => msgLower.includes(phrase)) || 
-                            (msgLower.includes('know') && msgLower.includes('how'));
+    // FIXED: Now triggers if it matches the checklist OR simply contains the single word "how"
+    const isVagueQuestion = vagueQuestions.some(phrase => msgLower.includes(phrase)) || msgLower.includes('how');
 
     if (isVagueQuestion) {
         // Track this user for 45 seconds to see if they dismiss the bot next
@@ -150,4 +150,4 @@ server.listen(8081, () => {
     console.log('FAQ Web Server listening on port 8081');
 });
 
-client.login(process.env.DISCORD_TOKEN);SS
+client.login(process.env.DISCORD_TOKEN);
