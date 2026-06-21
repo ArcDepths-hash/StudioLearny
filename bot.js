@@ -2,8 +2,8 @@
  * ============================================================================
  * @file bot.js
  * @description Advanced StudioLearny Lesson Dispatch & Infrastructure Bot
- * [Upgraded: Dynamic Single-Message DM UI Framework]
- * @version 3.1.0
+ * [Upgraded: Dynamic Single-Message DM UI Framework with Post-Complete Auto-Delete]
+ * @version 3.2.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -140,7 +140,7 @@ client.on('messageCreate', async (message) => {
         const baseReportEmbed = new EmbedBuilder()
             .setTitle('🖥️ StudioLearny Authorization Framework Diagnostics')
             .setTimestamp()
-            .setFooter({ text: 'Engine Version: 3.1.0-Prod • Core Architecture Active' });
+            .setFooter({ text: 'Engine Version: 3.2.0-Prod • Core Architecture Active' });
 
         if (message.author.id === OWNER_ID) {
             const upTimeMs = Date.now() - metricsEngine.bootTime.getTime();
@@ -314,14 +314,13 @@ client.on('interactionCreate', async (interaction) => {
 
         const wizardMessage = await directCommsPipe.send({ embeds: [queryStepOneEmbed] });
 
-        // Instantiate RAM record with saved message configuration ID tracking points
         activeWizards.set(userId, {
             tier: evaluatedTargetTier,
             targetChannelId: interaction.channelId,
             guildId: interaction.guildId,
             startedAt: Date.now(),
             step: 1,
-            wizardMessageId: wizardMessage.id, // <-- CRITICAL: Retain frame pointer ID
+            wizardMessageId: wizardMessage.id,
             data: {
                 title: null,
                 outline: null,
@@ -362,7 +361,6 @@ client.on('messageCreate', async (message) => {
     const normalizedRawPayload = message.content.trim();
 
     try {
-        // Fetch the active single layout core message from DM channel history cache
         const mainWizardMessage = await message.channel.messages.fetch(dynamicSessionState.wizardMessageId).catch(() => null);
         
         // 🧼 AUTOMATIC USER TEXT CLEANUP: Instantly delete the teacher's typed payload
@@ -566,13 +564,18 @@ async function buildAndDispatchLessonManifest(targetWizardMsgInstance, finalSess
         activeWizards.delete(uniqueUserId);
         metricsEngine.wizardsCompleted++;
 
-        // 🧼 OVERWRITE PANEL FOR CLEAN DM RECEIPT
+        // 🧼 OVERWRITE PANEL WITH A FINAL SUCCESS RECEIPT BEFORE DELETION
         const deploymentConfirmationReceiptEmbed = new EmbedBuilder()
             .setColor('#2ecc71')
             .setTitle('🚀 Frame Transmission Successful')
-            .setDescription('✅ **Compilation Matrix Confirmed.** Your customized curriculum blueprint package has been securely written into your server classroom environment.\n\n*This interaction terminal is now closed.*');
+            .setDescription('✅ **Compilation Matrix Confirmed.** Your lesson is live on the server!\n\n*Closing terminal and clearing interaction footprints...*');
 
-        return await targetWizardMsgInstance.edit({ embeds: [deploymentConfirmationReceiptEmbed] }).catch(() => null);
+        await targetWizardMsgInstance.edit({ embeds: [deploymentConfirmationReceiptEmbed] }).catch(() => null);
+
+        // ✨ VAPORIZE THE ENTIRE WIZARD CONSOLE AFTER 3 SECONDS
+        setTimeout(() => {
+            targetWizardMsgInstance.delete().catch(() => null);
+        }, 3000);
 
     } catch (engineCompilationFailure) {
         logger.error(`Critical Failure occurred at output generation phase for node profile: ${uniqueUserId}`, engineCompilationFailure);
@@ -584,7 +587,7 @@ async function buildAndDispatchLessonManifest(targetWizardMsgInstance, finalSess
             .setTitle('❌ Global Output Deployment Error')
             .setDescription('The application engine failed to post your finalized components into the target channel. Double-check that the bot retains "Send Messages" and "Embed Links" permissions inside that server space.');
         
-        return await targetWizardMsgInstance.edit({ embeds: [errorEmbed] }).catch(() => null);
+        await targetWizardMsgInstance.edit({ embeds: [errorEmbed] }).catch(() => null);
     }
 }
 
