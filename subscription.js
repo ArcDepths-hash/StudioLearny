@@ -2,8 +2,8 @@
  * ============================================================================
  * @file subscription.js
  * @description StudioLearny Ticket-Based Subscription Engine
- * [Features: Ticket Generation, Admin Approval, 30-Day Expiry, Central Logging]
- * @version 3.0.0
+ * [Features: !setup command, Access Role Injection, Live Log Revocation Controls]
+ * @version 3.1.0
  * @framework discord.js (v14+)
  * ============================================================================
  */
@@ -36,15 +36,16 @@ const client = new Client({
 
 // System Constants
 const TARGET_STORE_CHANNEL_ID = '1518224135291932882';
-const LOG_CHANNEL_ID = '1517811329828782121'; // Central logging hub
+const LOG_CHANNEL_ID = '1517811329828782121'; 
 const OWNER_ID = '1511377539073966353'; 
 
 const dataPath = path.join(__dirname, 'subscription_data.json');
 
+// Updated to use your precise Access Role IDs
 const SUBSCRIPTION_PLANS = {
-    basic: { name: "Basic Faculty Pass", cost: 0, durationDays: 30, roleId: "1518179501056458792" },
-    gold: { name: "Golden Masterclass Pass", cost: 1500, durationDays: 30, roleId: "1518179528545931463" },
-    diamond: { name: "Diamond Elite Pass", cost: 3500, durationDays: 30, roleId: "1518179554563194910" }
+    basic: { name: "Basic Faculty Pass", cost: 0, durationDays: 30, roleId: "1518225938112843937" },
+    gold: { name: "Golden Masterclass Pass", cost: 1500, durationDays: 30, roleId: "1518225966688764045" },
+    diamond: { name: "Diamond Elite Pass", cost: 3500, durationDays: 30, roleId: "1518225992425148446" }
 };
 
 let subscriptionRegistry = {};
@@ -60,35 +61,39 @@ function saveRegistryState() {
 // BOT LIFECYCLE HOOKS
 // ============================================================================
 client.once('ready', (instance) => {
-    console.log(`📡 SUBSCRIPTION TICKET ENGINE OPERATIONAL: ${instance.user.tag}`);
+    console.log(`============================================================================`);
+    console.log(`📡 SUBSCRIPTION TICKET BOT INSTANCE ACTIVE: ${instance.user.tag}`);
+    console.log(`============================================================================`);
     client.user.setPresence({ status: 'online', activities: [{ name: 'Subscription Tickets', type: ActivityType.Watching }] });
     setInterval(() => { runSubscriptionExpiryCheck(); }, 5 * 60 * 1000);
 });
 
 // ============================================================================
-// TEXT TRIGGERS: !setup ticketsub (OWNER LOCKED)
+// TEXT TRIGGERS: !setup (OWNER LOCKED)
 // ============================================================================
 client.on('messageCreate', async (message) => {
     if (message.author.bot || !message.guild) return;
 
-    if (message.content.toLowerCase().trim() === '!setup ticketsub') {
+    if (message.content.toLowerCase().trim() === '!setup') {
         if (message.author.id !== OWNER_ID) return;
         await message.delete().catch(() => null);
 
         const targetChannel = message.guild.channels.cache.get(TARGET_STORE_CHANNEL_ID);
-        if (!targetChannel) return message.channel.send("❌ Cannot find target store channel.");
+        if (!targetChannel) return message.channel.send("❌ Error: Target store channel not found in server cache.");
 
         const storeEmbed = new EmbedBuilder()
-            .setTitle('🏪 StudioLearny Subscription Portal')
-            .setDescription('Select a pass below to open a ticket. You will go through a brief onboarding process before your 30-day pass is activated.')
-            .setColor('#3498db');
+            .setTitle('🏪 StudioLearny Access Pass Marketplace')
+            .setDescription('Select a tier below to open an onboarding verification ticket. Your 30-day structural access credentials will activate upon completion.')
+            .setColor('#2c3e50')
+            .setTimestamp();
 
         const row = new ActionRowBuilder();
         for (const [key, plan] of Object.entries(SUBSCRIPTION_PLANS)) {
+            const labelText = plan.cost === 0 ? `Free ${plan.name.split(' ')[0]}` : plan.name.split(' ')[0];
             row.addComponents(
                 new ButtonBuilder()
                     .setCustomId(`open_ticket_${key}`)
-                    .setLabel(`Open ${plan.name.split(' ')[0]} Ticket`)
+                    .setLabel(`Open ${labelText} Ticket`)
                     .setStyle(plan.cost === 0 ? ButtonStyle.Primary : ButtonStyle.Success)
             );
         }
@@ -98,7 +103,7 @@ client.on('messageCreate', async (message) => {
 });
 
 // ============================================================================
-// INTERACTION ROUTER: TICKET FLOW
+// INTERACTION ROUTER: TICKET & OVERRIDE FLOW
 // ============================================================================
 client.on('interactionCreate', async (interaction) => {
     if (!interaction.isButton()) return;
@@ -114,7 +119,7 @@ client.on('interactionCreate', async (interaction) => {
         await interaction.deferReply({ ephemeral: true });
 
         const ticketChannel = await guild.channels.create({
-            name: `sub-${interaction.user.username}`,
+            name: `${planKey}-access-${interaction.user.username}`,
             type: 0,
             permissionOverwrites: [
                 { id: guild.id, deny: [PermissionFlagsBits.ViewChannel] },
@@ -124,24 +129,24 @@ client.on('interactionCreate', async (interaction) => {
         });
 
         const welcomeEmbed = new EmbedBuilder()
-            .setColor('#f1c40f')
-            .setTitle(`🎟️ ${plan.name} Application Process`)
-            .setDescription(`Welcome <@${userId}>! Please wait for <@${OWNER_ID}> to begin your onboarding process.\n\n*Admin: When the process is complete, click the button below to generate the final activation button for the user.*`);
+            .setColor('#e67e22')
+            .setTitle(`🎟️ ${plan.name} Intake Process`)
+            .setDescription(`Welcome <@${userId}>! Please await verification evaluation checks from <@${OWNER_ID}>.\n\n*Admin: When ready, press approval targets below to render the final authorization buttons.*`);
 
         const adminRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`admin_approve_${planKey}_${userId}`)
-                .setLabel('Approve & Generate Activation Button')
-                .setStyle(ButtonStyle.Secondary)
+                .setLabel('Approve Process & Drop Activation Link')
+                .setStyle(ButtonStyle.Primary)
         );
 
         await ticketChannel.send({ content: `<@${userId}> | <@${OWNER_ID}>`, embeds: [welcomeEmbed], components: [adminRow] });
-        return interaction.editReply({ content: `✅ Ticket opened: <#${ticketChannel.id}>` });
+        return interaction.editReply({ content: `✅ Onboarding ticket created: <#${ticketChannel.id}>` });
     }
 
     // --- PHASE 2: ADMIN APPROVES TICKET ---
     if (interaction.customId.startsWith('admin_approve_')) {
-        if (userId !== OWNER_ID) return interaction.reply({ content: '❌ Only admins can approve this step.', ephemeral: true });
+        if (userId !== OWNER_ID) return interaction.reply({ content: '❌ Security Exception: Management credentials check failed.', ephemeral: true });
 
         const [, , planKey, targetUserId] = interaction.customId.split('_');
         const plan = SUBSCRIPTION_PLANS[planKey];
@@ -149,35 +154,32 @@ client.on('interactionCreate', async (interaction) => {
         const userRow = new ActionRowBuilder().addComponents(
             new ButtonBuilder()
                 .setCustomId(`user_finalize_${planKey}_${targetUserId}`)
-                .setLabel(`Activate 1-Month Pass (${plan.cost} Coins)`)
+                .setLabel(`Activate 1-Month Plan (${plan.cost} Coins)`)
                 .setStyle(ButtonStyle.Success)
         );
 
         await interaction.reply({
-            content: `✅ **Process Complete.** <@${targetUserId}>, click below to finalize your transaction and activate your roles!`,
+            content: `🏁 **Onboarding Approved.** <@${targetUserId}>, click below to confirm billing and deploy your access permissions!`,
             components: [userRow]
         });
         
-        // Remove the admin button so it isn't clicked twice
         await interaction.message.edit({ components: [] }).catch(() => null);
     }
 
     // --- PHASE 3: USER FINALIZES & PAYS ---
     if (interaction.customId.startsWith('user_finalize_')) {
         const [, , planKey, targetUserId] = interaction.customId.split('_');
-        if (userId !== targetUserId) return interaction.reply({ content: '❌ This button is not for you.', ephemeral: true });
+        if (userId !== targetUserId) return interaction.reply({ content: '❌ Access Denied: Interaction sequence owned by applicant.', ephemeral: true });
 
         const plan = SUBSCRIPTION_PLANS[planKey];
         const userWalletBalance = economyEngine.getBalance(userId);
 
         if (userWalletBalance < plan.cost) {
-            return interaction.reply({ content: `❌ Insufficient funds. You need ${plan.cost} coins.`, ephemeral: true });
+            return interaction.reply({ content: `❌ **Transaction Declined:** Insufficient balance. Cost requires \`${plan.cost}\` coins.`, ephemeral: true });
         }
 
-        // Deduct Coins
         economyEngine.updateBalance(userId, -plan.cost);
 
-        // Assign Roles
         const durationMs = plan.durationDays * 24 * 60 * 60 * 1000;
         let finalExpiration = Date.now() + durationMs;
         
@@ -190,29 +192,65 @@ client.on('interactionCreate', async (interaction) => {
             if (role) await member.roles.add(role).catch(() => null);
         }
 
-        // Log to Central Channel
+        // Send Receipt + Immediate Revoke Button into Log Channel
         const logChannel = guild.channels.cache.get(LOG_CHANNEL_ID);
         if (logChannel) {
             const logEmbed = new EmbedBuilder()
                 .setColor('#2ecc71')
-                .setTitle('🧾 Subscription Activated')
+                .setTitle('🧾 Access Subscription Registered')
                 .addFields(
-                    { name: 'User', value: `<@${userId}>`, inline: true },
-                    { name: 'Plan', value: plan.name, inline: true },
-                    { name: 'Cost', value: `${plan.cost} Coins`, inline: true },
-                    { name: 'Expires', value: `<t:${Math.floor(finalExpiration / 1000)}:R>`, inline: true }
+                    { name: 'User Account', value: `<@${userId}> (\`${userId}\`)`, inline: true },
+                    { name: 'Assigned Plan', value: `\`${plan.name}\``, inline: true },
+                    { name: 'Transaction Cost', value: `\`${plan.cost} Coins\``, inline: true },
+                    { name: 'Expiration Date', value: `<t:${Math.floor(finalExpiration / 1000)}:F> (<t:${Math.floor(finalExpiration / 1000)}:R>)` }
                 )
                 .setTimestamp();
-            await logChannel.send({ embeds: [logEmbed] });
+
+            const logOverrideRow = new ActionRowBuilder().addComponents(
+                new ButtonBuilder()
+                    .setCustomId(`admin_force_revoke_${userId}_${planKey}`)
+                    .setLabel('End Subscription Instantly 🛑')
+                    .setStyle(ButtonStyle.Danger)
+            );
+
+            await logChannel.send({ embeds: [logEmbed], components: [logOverrideRow] });
         }
 
-        await interaction.reply({ content: '✅ **Subscription Activated!** This ticket will close in 5 seconds.' });
+        await interaction.reply({ content: '🎉 **Pass Activated Successfully!** Initializing clearance nodes. Ticket closing in 5 seconds...' });
         setTimeout(() => interaction.channel.delete().catch(() => null), 5000);
+    }
+
+    // --- PHASE 4: EMERGENCY LOG REVOCATION (OWNER LOCKED) ---
+    if (interaction.customId.startsWith('admin_force_revoke_')) {
+        if (userId !== OWNER_ID) return interaction.reply({ content: '❌ Management authorization validation failure.', ephemeral: true });
+
+        const [, , , targetUserId, planKey] = interaction.customId.split('_');
+        const plan = SUBSCRIPTION_PLANS[planKey];
+
+        // Wipe data state references
+        if (subscriptionRegistry[targetUserId]) {
+            delete subscriptionRegistry[targetUserId];
+            saveRegistryState();
+        }
+
+        // Strip access role components from target instantly
+        const targetMember = await guild.members.fetch(targetUserId).catch(() => null);
+        if (targetMember && plan) {
+            await targetMember.roles.remove(plan.roleId).catch(() => null);
+            await targetMember.send(`🛑 Your premium **${plan.name}** access pass has been terminated early by an administrator.`).catch(() => null);
+        }
+
+        const updatedLogEmbed = EmbedBuilder.from(interaction.message.embeds[0])
+            .setColor('#c0392b')
+            .setTitle('🛑 Access Subscription FORCE TERMINATED')
+            .addFields({ name: 'Termination Event Log', value: `Revoked by <@${OWNER_ID}> on <t:${Math.floor(Date.now() / 1000)}:F>` });
+
+        await interaction.update({ embeds: [updatedLogEmbed], components: [] });
     }
 });
 
 // ============================================================================
-// EXPIRATION SWEEPER ROUTINE
+// AUTOMATED RUNTIME EXPIRATION SWEEPER
 // ============================================================================
 async function runSubscriptionExpiryCheck() {
     const now = Date.now();
@@ -227,7 +265,7 @@ async function runSubscriptionExpiryCheck() {
                     const plan = SUBSCRIPTION_PLANS[record.tier];
                     if (plan) {
                         await member.roles.remove(plan.roleId).catch(() => null);
-                        await member.send(`⚠️ Your **${plan.name}** has expired. Please open a new ticket to renew.`).catch(() => null);
+                        await member.send(`⚠️ Your Premium **${plan.name}** access status has expired. Head back to the marketplace to open a renewal ticket.`).catch(() => null);
                     }
                 }
             }
@@ -237,7 +275,7 @@ async function runSubscriptionExpiryCheck() {
 
 const server = http.createServer((req, res) => {
     res.writeHead(200, { 'Content-Type': 'text/plain' });
-    res.end('Subscription Ticket Bot Operational\n');
+    res.end('Subscription System Online\n');
 });
 server.listen(8083);
 
